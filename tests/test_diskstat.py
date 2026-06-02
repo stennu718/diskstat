@@ -1,11 +1,20 @@
 import sys
 import os
 import json
+import csv as csv_mod
 import pytest
+import tempfile, io
+from contextlib import redirect_stdout
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), os.pardir))
 
-from diskstat import _resolve_path, format_bytes, ext_category, scan, build_flat, render_html, main
+from diskstat import (
+    _resolve_path, format_bytes, ext_category, scan, build_flat,
+    render_html, _find_template, _render_template, _write_csv, _parse_args,
+    _output_json, _output_text, _open_report, _make_colors, _supports_color,
+    EXT_COLORS, EXT_MAP, _MAX_SCAN_DEPTH,
+    main,
+)
 
 
 # _resolve_path — validates and resolves paths
@@ -374,6 +383,302 @@ def test_main_no_color_flag(tmp_path):
     out = buf.getvalue()
     # Should not contain ANSI escape codes
     assert "\033[" not in out
+
+
+# --- Tests for refactored helper functions ---
+
+def test_find_template_exists():
+    """_find_template should find the template file."""
+    path = _find_template()
+    assert os.path.exists(path)
+    assert path.endswith("template.html")
+
+
+def test_render_template_substitutes_placeholders():
+    """_render_template should replace all placeholders."""
+    tpl_path = _find_template()
+    flat = [{"name": "test.txt", "size": 100, "category": "doc"}]
+    result = _render_template(tpl_path, "MyRoot", "5 files | 100 B total", flat, EXT_COLORS)
+    assert "__ROOT_NAME__" not in result
+    assert "__STATS_LINE__" not in result
+    assert "__JS_FLAT__" not in result
+    assert "__JS_COLORS__" not in result
+    assert "MyRoot" in result
+    assert "test.txt" in result
+    assert "#1f77b4" in result  # folder color from EXT_COLORS
+
+
+def test_render_template_escapes_html():
+    """_render_template should escape HTML entities in root_name."""
+    tpl_path = _find_template()
+    result = _render_template(tpl_path, "<script>alert('xss')</script>", "1 &lt; 100", [], EXT_COLORS)
+    # User-controlled root_name must be escaped — D3 <script> blocks come from template, not user input
+    assert "<script>alert('xss')</script>" not in result
+    assert "&lt;script&gt;alert" in result
+
+
+def test_write_csv_creates_file(tmp_path):
+    """_write_csv should write valid CSV with correct headers."""
+    flat = [
+        {"name": "root", "path": "/tmp", "size": 100, "category": "folder", "parent": None},
+        {"name": "a.txt", "path": "/tmp/a.txt", "size": 50, "category": "doc", "parent": "root"},
+    ]
+    csv_path = str(tmp_path / "test.csv")
+    _write_csv(flat, csv_path)
+    with open(csv_path, "r") as f:
+        reader = csv_mod.reader(f)
+        rows = list(reader)
+    assert rows[0] == ["name", "path", "size_bytes", "size_human", "category", "parent"]
+    assert len(rows) == 3  # header + 2 data rows
+    assert rows[1][0] == "root"
+    assert rows[2][0] == "a.txt"
+
+
+def test_parse_args_defaults():
+    """_parse_args should return sensible defaults."""
+    old_argv = sys.argv
+    try:
+        sys.argv = ["diskstat.py"]
+        args = _parse_args()
+        assert args.path == "/mnt/c/"
+        assert args.max_nodes == 5000
+        assert args.min_size == 0
+        assert args.format == "text"
+        assert args.no_color is False
+        assert args.progress is False
+        assert args.category == []
+        assert args.exclude == []
+        assert args.sort == "size"
+        assert args.top == 0
+    finally:
+        sys.argv = old_argv
+
+
+def test_parse_args_custom():
+    """_parse_args should parse custom flags."""
+    old_argv = sys.argv
+    try:
+        sys.argv = ["diskstat.py", "/home", "--format", "json", "--sort", "name", "--top", "10", "--max-nodes", "100"]
+        args = _parse_args()
+        assert args.path == "/home"
+        assert args.format == "json"
+        assert args.sort == "name"
+        assert args.top == 10
+        assert args.max_nodes == 100
+    finally:
+        sys.argv = old_argv
+
+
+def test_parse_args_clamp_max_nodes():
+    """_parse_args should clamp max_nodes to [1, 500000]."""
+    old_argv = sys.argv
+    try:
+        sys.argv = ["diskstat.py", "--max-nodes", "999999"]
+        args = _parse_args()
+        assert args.max_nodes == 500_000
+        sys.argv = ["diskstat.py", "--max-nodes", "0"]
+        args = _parse_args()
+        assert args.max_nodes == 1
+    finally:
+        sys.argv = old_argv
+
+
+def test_parse_args_negative_top():
+    """_parse_args should set negative --top to 0."""
+    old_argv = sys.argv
+    try:
+        sys.argv = ["diskstat.py", "--top", "-5"]
+        args = _parse_args()
+        assert args.top == 0
+    finally:
+        sys.argv = old_argv
+
+
+def test_output_text_no_color(tmp_path, capsys):
+    """_output_text should work with colors disabled."""
+    stats = {"files": 10, "dirs": 2, "skipped": 0, "elapsed_s": 1.5, "root": str(tmp_path), "total_bytes": 1024}
+    C = _make_colors(False)
+    _output_text(stats, str(tmp_path), "/out/report.html", "/out/files.csv", C)
+    out, _ = capsys.readouterr()
+    assert "\033[" not in out
+    assert "DiskStat" in out
+
+
+def test_make_colors_enabled():
+    C = _make_colors(True)
+    assert C.CYAN == "\033[36m"
+    assert C.RED == "\033[31m"
+    assert C.RESET == "\033[0m"
+
+
+def test_make_colors_disabled():
+    C = _make_colors(False)
+    assert C.CYAN == ""
+    assert C.RED == ""
+    assert C.RESET == ""
+
+
+def test_supports_color_no_color_env(monkeypatch):
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert _supports_color() is False
+
+
+def test_max_scan_depth_constant():
+    """_MAX_SCAN_DEPTH should be 256."""
+    assert _MAX_SCAN_DEPTH == 256
+
+
+def test_ext_map_categories():
+    """EXT_MAP should contain expected categories."""
+    expected = {"zip", "image", "video", "audio", "doc", "code", "exe", "font", "data", "system"}
+    assert set(EXT_MAP.keys()) == expected
+
+
+def test_ext_colors_all_categories():
+    """EXT_COLORS should have entries for all EXT_MAP categories plus folder/unknown."""
+    for cat in EXT_MAP:
+        assert cat in EXT_COLORS, f"Missing color for category: {cat}"
+    assert "folder" in EXT_COLORS
+    assert "unknown" in EXT_COLORS
+
+
+def test_format_bytes_edge_cases():
+    """format_bytes edge cases."""
+    assert format_bytes(0) == "0.0 B"
+    assert format_bytes(-1) == "0.0 B"
+    assert format_bytes(None) == "0.0 B"
+    assert format_bytes("abc") == "0.0 B"
+    assert format_bytes(1) == "1.0 B"
+    assert format_bytes(1023) == "1023.0 B"
+    assert format_bytes(1024) == "1.0 KB"
+
+
+def test_format_bytes_pb():
+    """format_bytes should handle petabytes."""
+    result = format_bytes(1024 ** 5)
+    assert "PB" in result
+
+
+
+# --- Tests for --sort and ---
+
+# --- Tests for --sort and --top CLI flags ---
+
+def test_main_top_flag_in_text_mode(tmp_path):
+    """--top N should show top N files in text output."""
+    (tmp_path / "small.txt").write_text("a" * 10)
+    (tmp_path / "large.bin").write_bytes(b"\x00" * 10000)
+    (tmp_path / "medium.txt").write_text("b" * 1000)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    buf = io.StringIO()
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--top", "2"]
+        with redirect_stdout(buf):
+            main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    out = buf.getvalue()
+    assert "Top 2 files" in out
+    assert "large.bin" in out
+
+
+def test_main_sort_by_name(tmp_path):
+    """--sort name should sort top files alphabetically."""
+    (tmp_path / "zebra.txt").write_text("z" * 5000)
+    (tmp_path / "alpha.txt").write_text("a" * 100)
+    (tmp_path / "mango.txt").write_text("m" * 500)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    buf = io.StringIO()
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--top", "10", "--sort", "name"]
+        with redirect_stdout(buf):
+            main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    out = buf.getvalue()
+    assert "Top 10 files" in out
+    alpha_pos = out.index("alpha.txt")
+    zebra_pos = out.index("zebra.txt")
+    assert alpha_pos < zebra_pos  # alpha before zebra
+
+
+def test_main_top_zero_shows_all(tmp_path):
+    """--top 0 (default) should not show top files list."""
+    (tmp_path / "a.txt").write_text("hello")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    buf = io.StringIO()
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--top", "0"]
+        with redirect_stdout(buf):
+            main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    out = buf.getvalue()
+    assert "Top" not in out  # No top N section when --top 0
+
+
+def test_build_flat_with_min_size(tmp_path):
+    """build_flat should filter files smaller than min_size."""
+    tree = {"name": "root", "size": 100, "category": "folder", "children": [
+        {"name": "tiny.txt", "size": 10, "category": "doc"},
+        {"name": "big.txt", "size": 90, "category": "doc"},
+    ]}
+    flat = build_flat(tree, max_nodes=10, min_size=50)
+    names = [f["name"] for f in flat]
+    assert "big.txt" in names
+    assert "tiny.txt" not in names
+
+
+def test_build_flat_with_categories(tmp_path):
+    """build_flat should filter by category."""
+    tree = {"name": "root", "size": 200, "category": "folder", "children": [
+        {"name": "a.py", "size": 50, "category": "code"},
+        {"name": "b.jpg", "size": 150, "category": "image"},
+    ]}
+    flat = build_flat(tree, max_nodes=10, categories=["code"])
+    names = [f["name"] for f in flat]
+    assert "a.py" in names
+    assert "b.jpg" not in names
+
+
+def test_build_flat_with_exclude_dirs(tmp_path):
+    """build_flat should skip excluded directory names."""
+    tree = {"name": "root", "size": 150, "category": "folder", "children": [
+        {"name": ".git", "size": 50, "category": "folder", "children": [
+            {"name": "config", "size": 50},
+        ]},
+        {"name": "src", "size": 100, "category": "folder", "children": [
+            {"name": "main.py", "size": 100, "category": "code"},
+        ]},
+    ]}
+    flat = build_flat(tree, max_nodes=100, exclude_dirs=[".git"])
+    names = [f["name"] for f in flat]
+    assert "src" in names
+    assert ".git" not in names
+    assert "config" not in names
 
 
 

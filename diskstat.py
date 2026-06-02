@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Disk usage analyzer (WinDirStat-like). Scans a directory, then produces an HTML treemap + CSV report."""
 
-import os, sys, time, datetime, json, csv, pathlib, webbrowser, html as html_mod, subprocess
+import os, sys, time, datetime, json, csv, pathlib, webbrowser, html as html_mod, subprocess, argparse
 
 DEFAULT_TARGET = "/mnt/c/"
 
@@ -68,12 +68,12 @@ _MAX_SCAN_DEPTH = 256  # prevent runaway recursion from deep nesting
 
 
 def format_bytes(b):
-    if not b or b < 0:
+    if not isinstance(b, (int, float)):
         return "0.0 B"
-    if b == 0:
+    if b <= 0:
         return "0.0 B"
     units = ["B", "KB", "MB", "GB", "TB", "PB"]
-    i = int(min(len(units) - 1, (b.bit_length() - 1) // 10))
+    i = int(min(len(units) - 1, (int(b).bit_length() - 1) // 10))
     v = b / (1024 ** i)
     return f"{v:.1f} {units[i]}"
 
@@ -86,7 +86,7 @@ def scan(path: str, on_progress=None):
         return {"name": os.path.basename(path) or path, "path": path, "size": 0, "category": "folder"}, {
             "files": 0, "dirs": 0, "skipped": 1, "elapsed_s": 0, "root": path,
         }
-    root_name = os.path.basename(os.path.normpath(path)) or "\\"
+    root_name = os.path.basename(path) or path
     tree = {"name": root_name, "path": path, "size": 0, "category": "folder"}
     t0 = time.time()
     scanned_files = 0
@@ -312,7 +312,6 @@ def _make_colors(enabled):
 
 
 def _parse_args():
-    import argparse
     ap = argparse.ArgumentParser(description="Disk usage analyzer (WinDirStat-like) for Windows/WSL")
     ap.add_argument("path", nargs="?", default="/mnt/c/", help="Path to scan (default: /mnt/c/)")
     ap.add_argument("-o", "--out", default=None, help="Output directory")
@@ -324,9 +323,13 @@ def _parse_args():
     ap.add_argument("--min-size", type=int, default=0, help="Minimum file size in bytes (default: 0)")
     ap.add_argument("--category", action="append", default=[], help="Filter by category (can repeat)")
     ap.add_argument("--exclude", action="append", default=[], help="Exclude dir names (can repeat: .git, node_modules)")
+    ap.add_argument("--sort", choices=["size", "name"], default="size", help="Sort flat list by size or name (default: size)")
+    ap.add_argument("--top", type=int, default=0, help="Show only top N largest files (0 = all)")
     args = ap.parse_args()
     args.max_nodes = max(1, min(int(args.max_nodes), 500_000))
     args.min_size = max(0, args.min_size)
+    if args.top < 0:
+        args.top = 0
     return args
 
 
@@ -334,7 +337,7 @@ def _output_json(tree, stats, flat, target, html_out, csv_out):
     total = tree.get("size", 0)
     result = {
         "ok": True,
-        "target": os.path.realpath(target),
+        "target": stats.get("root", target),
         "stats": stats,
         "total_bytes": total,
         "total_human": format_bytes(total),
@@ -344,9 +347,10 @@ def _output_json(tree, stats, flat, target, html_out, csv_out):
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
-def _output_text(tree, stats, target, html_out, csv_out, C):
-    total = tree.get("size", 0)
-    print(f"{C.BOLD}DiskStat{C.RESET} — {C.CYAN}{os.path.realpath(target)}{C.RESET}")
+def _output_text(stats, target, html_out, csv_out, C):
+    total = stats.get("total_bytes", 0)
+    root = stats.get("root", target)
+    print(f"{C.BOLD}DiskStat{C.RESET} — {C.CYAN}{root}{C.RESET}")
     print(f"{C.GREEN}✓{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
     print(f"  {stats['dirs']} dirs  {stats['files']} files  {stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
     print(f"  {C.CYAN}HTML{C.RESET} : {html_out}")
@@ -414,7 +418,21 @@ def main():
             exclude_dirs=args.exclude or None,
         )
         render_html(tree, flat, target, html_out, csv_out)
-        _output_text(tree, stats, target, html_out, csv_out, C)
+        stats["total_bytes"] = tree.get("size", 0)
+        _output_text(stats, target, html_out, csv_out, C)
+
+        # Show top N files in text mode
+        if args.top > 0 and flat:
+            files_only = [n for n in flat if n.get("category") != "folder" and n.get("parent") is not None]
+            if args.sort == "name":
+                files_only.sort(key=lambda n: n.get("name", "").lower())
+            else:
+                files_only.sort(key=lambda n: n.get("size", 0), reverse=True)
+            top_n = files_only[:args.top]
+            print(f"\n{C.BOLD}Top {args.top} files (--sort {args.sort}):{C.RESET}")
+            for i, n in enumerate(top_n, 1):
+                size_str = format_bytes(n.get("size", 0))
+                print(f"  {C.CYAN}{i:>4}{C.RESET}. {size_str:>12}  {n.get('name', '?')}")
 
     if args.open:
         _open_report(html_out)
