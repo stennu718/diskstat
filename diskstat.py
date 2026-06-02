@@ -451,8 +451,9 @@ def _output_json(tree, stats, flat, target, html_out, csv_out, dry_run=False):
 def _output_text(stats, target, html_out, csv_out, C):
     total = stats.get("total_bytes", 0)
     root = stats.get("root", target)
+    done_mark = "OK" if C.GREEN == "" else "✓"
     print(f"{C.BOLD}DiskStat{C.RESET} — {C.CYAN}{root}{C.RESET}")
-    print(f"{C.GREEN}✓{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
+    print(f"{C.GREEN}{done_mark}{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
     print(f"  {stats['dirs']} dirs  {stats['files']} files  "
           f"{stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
     print(f"  {C.CYAN}HTML{C.RESET} : {html_out}")
@@ -480,6 +481,12 @@ def _open_report(html_out):
 
 
 def main():
+    # Ensure UTF-8 output on Windows consoles (PyInstaller exe)
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except (AttributeError, OSError):
+        pass
     args = _parse_args()
 
     # Load config file if specified and apply defaults
