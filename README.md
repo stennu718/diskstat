@@ -71,6 +71,7 @@ Options:
   --exclude DIR          Jäta kataloog välja (mitmekordne: .git, node_modules)
   --sort {size,name}     Sortimise järjekord (vaikimisi: size)
   --top N                Kuva top N suurimat faili (0 = kõik)
+  --reverse              Pööra sortimise järjekord (väiksemad enne)
   --filter REGEX         Regex filter failinimedele (case-insensitive)
   --max-depth N          Maksimaalse skaneerimise sügavus (vaikimisi 256)
   --dry-run              Skanneeri ainult, ära kirjuta faile
