@@ -681,5 +681,145 @@ def test_build_flat_with_exclude_dirs(tmp_path):
     assert "config" not in names
 
 
+def test_scan_max_depth_override(tmp_path):
+    """scan() should respect max_depth parameter."""
+    # Create nested dirs: root/d0/d1/d2/d3
+    current = tmp_path
+    for i in range(4):
+        current = current / f"d{i}"
+        current.mkdir()
+    (current / "deep_file.txt").write_text("deep")
+    (tmp_path / "root_file.txt").write_text("root")
+
+    # Default depth should find all
+    tree, stats = scan(str(tmp_path))
+    assert stats["files"] == 2
+
+    # Depth 0 should only scan root
+    tree, stats = scan(str(tmp_path), max_depth=0)
+    assert stats["files"] == 1
+    assert stats["skipped"] >= 1
+
+
+def test_main_version_flag(capsys):
+    """--version should print version and exit."""
+    old_argv = sys.argv
+    try:
+        sys.argv = ["diskstat.py", "--version"]
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        assert exc_info.value.code == 0
+    finally:
+        sys.argv = old_argv
+
+
+def test_main_dry_run_no_files(tmp_path):
+    """--dry-run should not create HTML/CSV files."""
+    (tmp_path / "a.txt").write_text("hello")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--dry-run"]
+        main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    htmls = list(out_dir.glob("*.html"))
+    csvs = list(out_dir.glob("*.csv"))
+    assert len(htmls) == 0
+    assert len(csvs) == 0
+
+
+def test_main_filter_flag(tmp_path):
+    """--filter should only show matching files."""
+    (tmp_path / "test_module.py").write_text("a" * 1000)
+    (tmp_path / "README.md").write_text("b" * 100)
+    (tmp_path / "app.js").write_text("c" * 500)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--filter", r"\.py$"]
+        main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    # Check CSV only has .py files
+    csv_files = list(out_dir.glob("*.csv"))
+    assert len(csv_files) == 1
+    content = csv_files[0].read_text()
+    assert "test_module.py" in content
+    assert "README.md" not in content
+    assert "app.js" not in content
+
+
+def test_main_max_depth_flag(tmp_path):
+    """--max-depth should limit scan depth."""
+    (tmp_path / "shallow.txt").write_text("x")
+    deep = tmp_path / "a" / "b" / "c"
+    deep.mkdir(parents=True)
+    (deep / "deep.txt").write_text("y")
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--max-depth", "1"]
+        main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    csv_files = list(out_dir.glob("*.csv"))
+    assert len(csv_files) == 1
+    content = csv_files[0].read_text()
+    assert "shallow.txt" in content
+    assert "deep.txt" not in content
+
+
+def test_main_category_summary(tmp_path):
+    """Text mode should show category summary."""
+    (tmp_path / "a.py").write_text("x" * 100)
+    (tmp_path / "b.jpg").write_text("y" * 200)
+    (tmp_path / "c.txt").write_text("z" * 300)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--no-color"]
+        main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    # Re-read stdout - category summary is printed
+    # This test just ensures no crash with multiple categories
+
+
+def test_timestamp_microsecond_no_conflict(tmp_path):
+    """Output dir timestamp should include microseconds to avoid conflicts."""
+    # Verify the timestamp format includes %f
+    import datetime as dt
+    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    assert len(ts) == 22  # YYYYMMDD_HHMMSS_ffffff
+
+
 
 

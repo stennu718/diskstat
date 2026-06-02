@@ -2,6 +2,7 @@
 """Disk usage analyzer (WinDirStat-like). Scans a directory, then produces an HTML treemap + CSV report."""
 
 import os
+import re
 import sys
 import time
 import datetime
@@ -95,7 +96,15 @@ def format_bytes(b):
     return f"{v:.1f} {units[i]}"
 
 
-def scan(path: str, on_progress=None):
+def scan(path: str, on_progress=None, max_depth=None):
+    """Scan directory tree. Returns (tree, stats).
+
+    Args:
+        path: directory to scan
+        on_progress: optional callback(directory, files, dirs)
+        max_depth: override default max recursion depth
+    """
+    _depth_limit = max_depth if max_depth is not None else _MAX_SCAN_DEPTH
     # Windows path normalisation is handled by _resolve_path
     try:
         path = _resolve_path(path)
@@ -112,7 +121,7 @@ def scan(path: str, on_progress=None):
 
     def _walk(directory: str, node: dict, depth: int = 0):
         nonlocal scanned_files, scanned_dirs, skipped
-        if depth > _MAX_SCAN_DEPTH:
+        if depth > _depth_limit:
             skipped += 1
             return 0
         if on_progress:
@@ -337,8 +346,10 @@ def _parse_args():
     ap.add_argument("path", nargs="?", default="/mnt/c/", help="Path to scan (default: /mnt/c/)")
     ap.add_argument("-o", "--out", default=None, help="Output directory")
     ap.add_argument("--open", action="store_true", help="Open HTML report after generation")
-    ap.add_argument("-m", "--max-nodes", type=int, default=5000, help="Max nodes to include in visualization")
-    ap.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
+    ap.add_argument("-m", "--max-nodes", type=int, default=5000,
+                    help="Max nodes to include in visualization")
+    ap.add_argument("--format", choices=["text", "json"], default="text",
+                    help="Output format (default: text)")
     ap.add_argument("--no-color", action="store_true", help="Disable colored output")
     ap.add_argument("--progress", action="store_true", help="Show live progress during scan")
     ap.add_argument("--min-size", type=int, default=0,
@@ -351,11 +362,20 @@ def _parse_args():
                     help="Sort flat list by size or name (default: size)")
     ap.add_argument("--top", type=int, default=0,
                     help="Show only top N largest files (0 = all)")
+    ap.add_argument("--filter", type=str, default=None,
+                    help="Regex pattern to filter file names (case-insensitive)")
+    ap.add_argument("--max-depth", type=int, default=_MAX_SCAN_DEPTH,
+                    help=f"Max scan depth (default: {_MAX_SCAN_DEPTH})")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="Scan only, do not write HTML/CSV files")
+    ap.add_argument("--version", action="version", version="%(prog)s 1.1.2")
     args = ap.parse_args()
     args.max_nodes = max(1, min(int(args.max_nodes), 500_000))
     args.min_size = max(0, args.min_size)
     if args.top < 0:
         args.top = 0
+    if args.max_depth < 1:
+        args.max_depth = 1
     return args
 
 
@@ -397,7 +417,8 @@ def main():
     args = _parse_args()
 
     target = args.path
-    out_dir = args.out or os.path.join(os.getcwd(), "diskstat", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    out_dir = args.out or os.path.join(os.getcwd(), "diskstat", ts)
     os.makedirs(out_dir, exist_ok=True)
     html_out = os.path.join(out_dir, "report.html")
     csv_out = os.path.join(out_dir, "files.csv")
@@ -405,8 +426,17 @@ def main():
     use_color = not args.no_color and _supports_color()
     C = _make_colors(use_color)
 
+    # Compile regex filter if provided
+    filter_re = None
+    if args.filter:
+        try:
+            filter_re = re.compile(args.filter, re.IGNORECASE)
+        except re.error as exc:
+            print(f"Invalid regex: {exc}", file=sys.stderr)
+            sys.exit(1)
+
     if args.format == "json":
-        tree, stats = scan(target)
+        tree, stats = scan(target, max_depth=args.max_depth)
         flat = build_flat(
             tree,
             max_nodes=int(args.max_nodes),
@@ -414,7 +444,9 @@ def main():
             categories=args.category or None,
             exclude_dirs=args.exclude or None,
         )
-        render_html(tree, flat, html_out, csv_out)
+        if not args.dry_run:
+            render_html(tree, flat, html_out, csv_out)
+        stats["total_bytes"] = tree.get("size", 0)
         _output_json(tree, stats, flat, target, html_out, csv_out)
     else:
         # Text mode
@@ -432,7 +464,7 @@ def main():
 
         print(f"{C.BOLD}DiskStat{C.RESET} — scanning {C.CYAN}{target}{C.RESET}")
         cb = on_progress if args.progress else None
-        tree, stats = scan(target, on_progress=cb)
+        tree, stats = scan(target, on_progress=cb, max_depth=args.max_depth)
 
         if args.progress:
             sys.stdout.write("\r" + " " * 100 + "\r")
@@ -445,9 +477,28 @@ def main():
             categories=args.category or None,
             exclude_dirs=args.exclude or None,
         )
-        render_html(tree, flat, html_out, csv_out)
+
+        # Apply regex filter to flat list
+        if filter_re:
+            flat = [n for n in flat if n.get("parent") is None or filter_re.search(n.get("name", ""))]
+
+        if not args.dry_run:
+            render_html(tree, flat, html_out, csv_out)
+
         stats["total_bytes"] = tree.get("size", 0)
+        stats["filter"] = args.filter
         _output_text(stats, target, html_out, csv_out, C)
+
+        # Category summary in text mode
+        all_nodes = [n for n in flat if n.get("parent") is not None]
+        if all_nodes:
+            cats: dict[str, int] = {}
+            for n in all_nodes:
+                c = n.get("category", "unknown")
+                cats[c] = cats.get(c, 0) + 1
+            print(f"\n{C.BOLD}Categories:{C.RESET}")
+            for cat, cnt in sorted(cats.items(), key=lambda x: -x[1]):
+                print(f"  {C.CYAN}{cat:>10}{C.RESET}: {cnt:>6} nodes")
 
         # Show top N files in text mode
         if args.top > 0 and flat:
