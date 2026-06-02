@@ -29,11 +29,13 @@ Thumbs.db
 *.tmp
 *.log
 
-# DiskStat generated output
-diskstat/
+# DiskStat generated output (glob patterns, NOT the package dir!)
 files.csv
 report.html
 
 # Backup files
 *.bak
 *.py.bak
+
+# Leftover batch file
+diskstat.bat

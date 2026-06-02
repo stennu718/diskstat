@@ -1,4 +1,5 @@
-"""Allows: python -m diskstat.diskstat"""
-from diskstat.diskstat import main
+"""DiskStat package entry point.
 
-main()
+Run via: python diskstat.py
+Do NOT use: python -m diskstat.diskstat  (not a valid package)
+"""
