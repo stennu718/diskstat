@@ -8,7 +8,6 @@ import time
 import datetime
 import json
 import csv
-import pathlib
 import webbrowser
 import html as html_mod
 import subprocess
@@ -75,7 +74,7 @@ def _resolve_path(p: str) -> str:
 def ext_category(name, is_dir=False):
     if is_dir:
         return "folder"
-    ext = pathlib.Path(name).suffix.lower()
+    ext = os.path.splitext(name)[1].lower()
     for cat, exts in EXT_MAP.items():
         if ext in exts:
             return cat
@@ -379,7 +378,7 @@ def _parse_args():
     return args
 
 
-def _output_json(tree, stats, flat, target, html_out, csv_out):
+def _output_json(tree, stats, flat, target, html_out, csv_out, dry_run=False):
     total = tree.get("size", 0)
     result = {
         "ok": True,
@@ -388,8 +387,11 @@ def _output_json(tree, stats, flat, target, html_out, csv_out):
         "total_bytes": total,
         "total_human": format_bytes(total),
         "nodes_included": len(flat),
-        "output": {"html": html_out, "csv": csv_out},
     }
+    if dry_run:
+        result["dry_run"] = True
+    else:
+        result["output"] = {"html": html_out, "csv": csv_out}
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
@@ -405,12 +407,23 @@ def _output_text(stats, target, html_out, csv_out, C):
 
 
 def _open_report(html_out):
+    """Open HTML report in browser. Handles WSL->Windows path conversion."""
+    # WSL: convert /mnt/X/... paths to X:\... for cmd.exe
+    html_win = html_out
+    for mnt_letter in "cdefghijklmnopqrstuvwxyz":
+        prefix = f"/mnt/{mnt_letter}/"
+        if html_out.startswith(prefix):
+            html_win = html_out.replace(prefix, f"{mnt_letter.upper()}:\\").replace("/", "\\")
+            break
+    else:
+        # Not under /mnt/ — use file:// URL
+        html_win = "file://" + html_out
+
     if os.path.exists("/mnt/c/Windows/System32/cmd.exe"):
         cmd_path = "/mnt/c/Windows/System32/cmd.exe"
-        html_win = html_out.replace("/mnt/c/", "C:\\").replace("/", "\\")
         subprocess.run([cmd_path, "/c", "start", "", html_win], shell=False)
     else:
-        webbrowser.open("file://" + html_out)
+        webbrowser.open(html_win)
 
 
 def main():
@@ -447,7 +460,7 @@ def main():
         if not args.dry_run:
             render_html(tree, flat, html_out, csv_out)
         stats["total_bytes"] = tree.get("size", 0)
-        _output_json(tree, stats, flat, target, html_out, csv_out)
+        _output_json(tree, stats, flat, target, html_out, csv_out, dry_run=args.dry_run)
     else:
         # Text mode
         _last_p = {"files": 0, "dirs": 0, "time": time.time()}

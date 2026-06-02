@@ -1,45 +1,13 @@
 import json
 import os
 import sys
-from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), os.pardir))
 from diskstat import build_flat, render_html
 
 
-def _sample_tree():
-    return {
-        "name": "root",
-        "path": "/mnt/data",
-        "size": 200,
-        "category": "folder",
-        "children": [
-            {
-                "name": "notes.txt",
-                "path": "/mnt/data/notes.txt",
-                "size": 100,
-                "category": "doc",
-            },
-            {
-                "name": "app",
-                "path": "/mnt/data/app",
-                "size": 100,
-                "category": "folder",
-                "children": [
-                    {
-                        "name": "main.py",
-                        "path": "/mnt/data/app/main.py",
-                        "size": 20,
-                        "category": "code",
-                    },
-                ],
-            },
-        ],
-    }
-
-
-def test_render_html_uses_addEventListener(tmp_path: Path):
-    tree = _sample_tree()
+def test_render_html_uses_addEventListener(tmp_path, sample_tree):
+    tree = sample_tree
     flat = build_flat(tree, max_nodes=10)
     htmlp = tmp_path / "addEventListener.html"
     csvp = tmp_path / "addEventListener.csv"
@@ -50,8 +18,8 @@ def test_render_html_uses_addEventListener(tmp_path: Path):
     assert "notes.txt" in text
 
 
-def test_render_html_includes_flat_json_and_legend(tmp_path: Path):
-    tree = _sample_tree()
+def test_render_html_includes_flat_json_and_legend(tmp_path, sample_tree):
+    tree = sample_tree
     flat = build_flat(tree, max_nodes=10)
     htmlp = tmp_path / "flat.html"
     csvp = tmp_path / "flat.csv"
