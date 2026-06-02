@@ -230,66 +230,61 @@ def build_flat(tree, max_nodes=5000, min_size=0, categories=None, exclude_dirs=N
     return out
 
 
+def _find_template():
+    """Locate template.html — checks submodule then project root."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for p in [os.path.join(here, "diskstat", "template.html"), os.path.join(here, "template.html")]:
+        if os.path.exists(p):
+            return p
+    raise FileNotFoundError(f"template.html not found. Searched: {[os.path.join(here, 'diskstat', 'template.html'), os.path.join(here, 'template.html')]}")
+
+
+def _render_template(template_path, root_name, stats_line, flat, colors):
+    """Read template and substitute placeholders. Returns HTML string."""
+    with open(template_path, "r", encoding="utf-8") as f:
+        html = f.read()
+    html = html.replace("__ROOT_NAME__", html_mod.escape(root_name))
+    html = html.replace("__STATS_LINE__", html_mod.escape(stats_line))
+    html = html.replace("__JS_FLAT__", json.dumps(flat, ensure_ascii=False))
+    html = html.replace("__JS_COLORS__", json.dumps(colors, ensure_ascii=False))
+    return html
+
+
+def _write_csv(flat, csv_path):
+    """Write flat node list to CSV."""
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["name", "path", "size_bytes", "size_human", "category", "parent"])
+        for row in flat:
+            w.writerow([
+                row.get("name", ""),
+                row.get("path", ""),
+                row.get("size", 0),
+                format_bytes(row.get("size", 0)),
+                row.get("category", "unknown"),
+                row.get("parent", ""),
+            ])
+
+
 def render_html(tree_data, flat, target, output_html, csv_path):
     """Render the WinDirStat-like HTML report from a template file."""
-    # Collect sidebar stats
     all_nodes = [n for n in flat if n.get("parent") is not None]
     total_size = sum(n.get("size", 0) for n in all_nodes)
     total_files = sum(1 for n in all_nodes if n.get("category") != "folder")
     total_dirs  = sum(1 for n in all_nodes if n.get("category") == "folder")
-    exts = {}
-    for n in all_nodes:
-        c = n.get("category", "unknown")
-        exts[c] = exts.get(c, 0) + 1
 
     root_name = tree_data.get("name", "ROOT")
     stats_line = "{files} files, {dirs} dirs | {total} total".format(
         files=total_files, dirs=total_dirs, total=format_bytes(total_size)
     )
 
-    # Read template - check several locations
-    _here = os.path.dirname(os.path.abspath(__file__))
-    _cand_sub = os.path.join(_here, "diskstat", "template.html")
-    _cand_root = os.path.join(_here, "template.html")
-    _candidates = [_cand_sub, _cand_root]
-    template_path = None
-    for _p in _candidates:
-        if os.path.exists(_p):
-            template_path = _p
-            break
-    if template_path is None:
-        raise FileNotFoundError(
-            f"template.html not found. Searched: {_candidates}"
-        )
-    with open(template_path, "r", encoding="utf-8") as f:
-        html = f.read()
-
-    # XSS guard: user-controlled data must be escaped before HTML injection
-    safe_root = html_mod.escape(root_name)
-    safe_stats = html_mod.escape(stats_line)
-
-    html = html.replace("__ROOT_NAME__", safe_root)
-    html = html.replace("__STATS_LINE__", safe_stats)
-    html = html.replace("__JS_FLAT__", json.dumps(flat, ensure_ascii=False))
-    html = html.replace("__JS_COLORS__", json.dumps(EXT_COLORS, ensure_ascii=False))
+    template_path = _find_template()
+    html = _render_template(template_path, root_name, stats_line, flat, EXT_COLORS)
 
     with open(output_html, "w", encoding="utf-8") as f:
         f.write(html)
 
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["name", "path", "size_bytes", "size_human", "category", "parent"])
-        for row in flat:
-            writer.writerow(
-                [
-                    row.get("name", ""),
-                    row.get("path", ""),
-                    row.get("size", 0),
-                    format_bytes(row.get("size", 0)),
-                    row.get("category", "unknown"),
-                    row.get("parent", ""),
-                ]
-            )
+    _write_csv(flat, csv_path)
 
 
 def _supports_color():
