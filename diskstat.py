@@ -155,7 +155,20 @@ def scan(path: str, on_progress=None):
     }
 
 
-def build_flat(tree, max_nodes: int = 5000):
+def build_flat(tree, max_nodes=5000, min_size=0, categories=None, exclude_dirs=None):
+    """Flatten tree to a list of nodes for visualization.
+
+    Args:
+        tree: nested dict from scan()
+        max_nodes: max nodes to include
+        min_size: minimum file size in bytes (files smaller are skipped)
+        categories: set of category names to include (None = all)
+        exclude_dirs: set of directory names to skip (None = none)
+    """
+    if categories is not None:
+        categories = set(categories)
+    if exclude_dirs is not None:
+        exclude_dirs = set(exclude_dirs)
     out = [
         {
             "name": tree.get("name", "ROOT"),
@@ -173,6 +186,14 @@ def build_flat(tree, max_nodes: int = 5000):
     children = tree.get("children", [])
     children.sort(key=lambda x: x.get("size", 0), reverse=True)
     for child in children:
+        cname = child.get("name", "")
+        ccat = child.get("category", "folder" if "children" in child else "unknown")
+        # Skip excluded dirs
+        if exclude_dirs and cname in exclude_dirs and ccat == "folder":
+            continue
+        # Skip by category filter (always keep folders for traversal)
+        if categories and ccat not in categories and ccat != "folder":
+            continue
         queue.append((child, tree.get("name", "ROOT")))
 
     count = 1
@@ -180,6 +201,15 @@ def build_flat(tree, max_nodes: int = 5000):
         node, parent_name = queue.pop(0)
         count += 1
         cat = node.get("category", "folder" if "children" in node else "unknown")
+
+        # Apply filters
+        if min_size > 0 and cat != "folder" and node.get("size", 0) < min_size:
+            count -= 1  # don't count filtered files
+            continue
+        if categories and cat not in categories:
+            count -= 1
+            continue
+
         out.append(
             {
                 "name": node.get("name", "?"),
@@ -274,19 +304,16 @@ def _supports_color():
         return False
 
 
-class _Colors:
-    """ANSI color codes (no-op when colors unsupported)."""
-    def __init__(self, enabled):
-        if enabled:
-            self.CYAN = "\033[36m"
-            self.GREEN = "\033[32m"
-            self.YELLOW = "\033[33m"
-            self.RED = "\033[31m"
-            self.BOLD = "\033[1m"
-            self.DIM = "\033[2m"
-            self.RESET = "\033[0m"
-        else:
-            self.CYAN = self.GREEN = self.YELLOW = self.RED = self.BOLD = self.DIM = self.RESET = ""
+def _make_colors(enabled):
+    """Return ANSI color codes as a simple namespace-like dict."""
+    if enabled:
+        return type("C", (), {
+            "CYAN": "\033[36m", "GREEN": "\033[32m", "YELLOW": "\033[33m",
+            "RED": "\033[31m", "BOLD": "\033[1m", "DIM": "\033[2m", "RESET": "\033[0m",
+        })()
+    return type("C", (), {
+        "CYAN": "", "GREEN": "", "YELLOW": "", "RED": "", "BOLD": "", "DIM": "", "RESET": "",
+    })()
 
 
 def main():
@@ -300,10 +327,14 @@ def main():
     ap.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
     ap.add_argument("--no-color", action="store_true", help="Disable colored output")
     ap.add_argument("--progress", action="store_true", help="Show live progress during scan")
+    ap.add_argument("--min-size", type=int, default=0, help="Minimum file size in bytes (default: 0)")
+    ap.add_argument("--category", action="append", default=[], help="Filter by category (can repeat)")
+    ap.add_argument("--exclude", action="append", default=[], help="Exclude dir names (can repeat: .git, node_modules)")
     args = ap.parse_args()
 
     # Clamp max_nodes to a sane range to prevent accidental DoS / OOM
     args.max_nodes = max(1, min(int(args.max_nodes), 500_000))
+    args.min_size = max(0, args.min_size)
 
     target = args.path
     out_dir = args.out or os.path.join(os.getcwd(), "diskstat", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
@@ -312,7 +343,7 @@ def main():
     csv_out = os.path.join(out_dir, "files.csv")
 
     use_color = not args.no_color and _supports_color()
-    C = _Colors(use_color)
+    C = _make_colors(use_color)
 
     if args.format == "json":
         # JSON mode: structured output, no colors
@@ -321,7 +352,13 @@ def main():
 
         tree, stats = scan(target, on_progress=on_progress if args.progress else None)
         total = tree.get("size", 0)
-        flat = build_flat(tree, max_nodes=int(args.max_nodes))
+        flat = build_flat(
+            tree,
+            max_nodes=int(args.max_nodes),
+            min_size=args.min_size,
+            categories=args.category or None,
+            exclude_dirs=args.exclude or None,
+        )
         render_html(tree, flat, target, html_out, csv_out)
 
         result = {
@@ -364,7 +401,13 @@ def main():
         print(f"{C.GREEN}✓{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
         print(f"  {stats['dirs']} dirs  {stats['files']} files  {stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
 
-        flat = build_flat(tree, max_nodes=int(args.max_nodes))
+        flat = build_flat(
+            tree,
+            max_nodes=int(args.max_nodes),
+            min_size=args.min_size,
+            categories=args.category or None,
+            exclude_dirs=args.exclude or None,
+        )
         render_html(tree, flat, target, html_out, csv_out)
         print(f"  {C.CYAN}HTML{C.RESET} : {html_out}")
         print(f"  {C.CYAN}CSV {C.RESET} : {csv_out}")

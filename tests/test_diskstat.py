@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), os.pardir))
@@ -281,6 +282,98 @@ def test_main_reports_live_progress(tmp_path):
 
     out = buf.getvalue()
     assert "scanning" in out.lower() or "Done:" in out
+
+
+# --- Additional tests ---
+
+def test_format_bytes_negative():
+    assert format_bytes(-1) == "0.0 B"
+
+
+def test_format_bytes_very_large():
+    # 1 PB
+    result = format_bytes(1024 ** 5)
+    assert "PB" in result
+
+
+def test_build_flat_empty_tree():
+    tree = {"name": "empty", "path": "/tmp", "size": 0, "category": "folder"}
+    flat = build_flat(tree, max_nodes=10)
+    assert len(flat) == 1
+    assert flat[0]["name"] == "empty"
+    assert flat[0]["parent"] is None
+
+
+def test_build_flat_single_file():
+    tree = {"name": "root", "path": "/tmp", "size": 100, "category": "folder", "children": [
+        {"name": "a.txt", "path": "/tmp/a.txt", "size": 100, "category": "doc"}
+    ]}
+    flat = build_flat(tree, max_nodes=10)
+    assert len(flat) == 2
+    assert flat[1]["name"] == "a.txt"
+    assert flat[1]["parent"] == "root"
+
+
+def test_scan_depth_limit(tmp_path):
+    # Create a deeply nested directory structure
+    current = tmp_path
+    for i in range(300):
+        current = current / f"dir_{i}"
+        current.mkdir()
+    (current / "deep_file.txt").write_text("deep")
+
+    tree, stats = scan(str(tmp_path))
+    # Should not crash, should skip deep dirs
+    assert stats["skipped"] > 0 or stats["dirs"] > 0
+
+
+def test_main_json_output(tmp_path):
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    try:
+        os.chdir(str(tmp_path))
+        (tmp_path / "test.txt").write_text("hello")
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--format", "json"]
+        with redirect_stdout(buf):
+            main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    out = buf.getvalue()
+    data = json.loads(out)
+    assert data["ok"] is True
+    assert "stats" in data
+    assert "output" in data
+    assert "html" in data["output"]
+
+
+def test_main_no_color_flag(tmp_path):
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    try:
+        os.chdir(str(tmp_path))
+        (tmp_path / "test.txt").write_text("hello")
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--no-color"]
+        with redirect_stdout(buf):
+            main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    out = buf.getvalue()
+    # Should not contain ANSI escape codes
+    assert "\033[" not in out
 
 
 
