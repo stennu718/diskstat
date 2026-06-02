@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://d3js.org; style-src 'self' 'unsafe-inline'; connect-src 'none'; font-src 'none';"/>
 <title>Disk Usage - __ROOT_NAME__</title>
 <style>
 :root {
@@ -94,7 +95,7 @@ a { color:#bde0fe; text-decoration:none; }
 </div>
 <div class="tooltip" id="tooltip"></div>
 
-<script src="https://d3js.org/d3.v7.min.js" integrity="sha384-+8GY5eFqxN2ZSpPVBIs0a5yRhqIEX1MbNgxRmuh9gczeyr6Yls/0mSTKhS8ErPbVt" crossorigin="anonymous"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 // Injected data
 const flat = __JS_FLAT__;

@@ -48,6 +48,25 @@ EXT_MAP = {
 }
 
 
+def _resolve_path(p: str) -> str:
+    """Resolve and validate a path for scanning.
+
+    - Expands ~
+    - Resolves symlinks (so we report on the real target)
+    - Must exist and be a directory
+    - Returns real absolute path
+    """
+    p = os.path.expanduser(p)
+    p = os.path.realpath(p)  # resolve symlinks
+    if not os.path.exists(p):
+        raise ValueError(f"Path does not exist: {p}")
+    if not os.path.isdir(p):
+        raise ValueError(f"Path is not a directory: {p}")
+    if not os.access(p, os.R_OK):
+        raise ValueError(f"Path is not readable: {p}")
+    return p
+
+
 def ext_category(name, is_dir=False):
     if is_dir:
         return "folder"
@@ -58,8 +77,13 @@ def ext_category(name, is_dir=False):
     return "unknown"
 
 
+_MAX_SCAN_DEPTH = 256  # prevent runaway recursion from deep nesting
+
+
 def format_bytes(b):
-    if not b:
+    if not b or b < 0:
+        return "0.0 B"
+    if b == 0:
         return "0.0 B"
     units = ["B", "KB", "MB", "GB", "TB", "PB"]
     i = int(min(len(units) - 1, (b.bit_length() - 1) // 10))
@@ -69,6 +93,13 @@ def format_bytes(b):
 
 def scan(path: str, on_progress=None):
     path = normalize_path(path)
+    # Validate the path — missing target returns empty result rather than crashing
+    try:
+        path = _resolve_path(path)
+    except (ValueError, OSError):
+        return {"name": os.path.basename(path) or path, "path": path, "size": 0, "category": "folder"}, {
+            "files": 0, "dirs": 0, "skipped": 1, "elapsed_s": 0, "root": path,
+        }
     root_name = os.path.basename(os.path.normpath(path)) or "\\"
     tree = {"name": root_name, "path": path, "size": 0, "category": "folder"}
     t0 = time.time()
@@ -76,13 +107,13 @@ def scan(path: str, on_progress=None):
     scanned_dirs = 0
     skipped = 0
 
-    def _walk(directory: str, node: dict):
+    def _walk(directory: str, node: dict, depth: int = 0):
         nonlocal scanned_files, scanned_dirs, skipped
-        if on_progress:
-            on_progress(directory, scanned_files, scanned_dirs)
-        if not os.path.isdir(directory):
+        if depth > _MAX_SCAN_DEPTH:
             skipped += 1
             return 0
+        if on_progress:
+            on_progress(directory, scanned_files, scanned_dirs)
         try:
             entries = sorted(os.scandir(directory), key=lambda e: e.name)
         except (OSError, PermissionError):
@@ -101,7 +132,7 @@ def scan(path: str, on_progress=None):
                         "children": [],
                     }
                     node.setdefault("children", []).append(child)
-                    size += _walk(entry.path, child)
+                    size += _walk(entry.path, child, depth + 1)
                 elif entry.is_file(follow_symlinks=False):
                     try:
                         sz = entry.stat(follow_symlinks=False).st_size
@@ -123,7 +154,12 @@ def scan(path: str, on_progress=None):
         node["size"] = size
         return size
 
-    _walk(path, tree)
+    # If the target was deleted between validation and scan, handle gracefully
+    try:
+        _walk(path, tree)
+    except (OSError, PermissionError) as e:
+        # Target became inaccessible during scan — return empty result
+        pass
     return tree, {
         "files": scanned_files,
         "dirs": scanned_dirs,
@@ -265,16 +301,6 @@ class _Colors:
             self.RESET = "\033[0m"
         else:
             self.CYAN = self.GREEN = self.YELLOW = self.RED = self.BOLD = self.DIM = self.RESET = ""
-
-
-def _progress_bar(current, total, width=30):
-    """Return a simple ASCII progress bar string."""
-    if total <= 0:
-        return ""
-    filled = int(width * current / total)
-    bar = "█" * filled + "░" * (width - filled)
-    pct = current / total * 100
-    return f"[{bar}] {pct:.0f}%"
 
 
 def main():
