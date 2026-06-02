@@ -28,3 +28,12 @@ Thumbs.db
 # Temp
 *.tmp
 *.log
+
+# DiskStat generated output
+diskstat/
+files.csv
+report.html
+
+# Backup files
+*.bak
+*.py.bak
