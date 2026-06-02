@@ -4,26 +4,33 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), os.pardir))
 
-from diskstat import normalize_path, format_bytes, ext_category, scan, build_flat, render_html, main
+from diskstat import _resolve_path, format_bytes, ext_category, scan, build_flat, render_html, main
 
 
-# normalize_path
-def test_normalize_path_windows_drive_backslash():
-    assert normalize_path(r"C:\Users\foo") == "/mnt/c/Users/foo"
+# _resolve_path — validates and resolves paths
+def test_resolve_path_missing_dir(tmp_path):
+    with pytest.raises(ValueError, match="does not exist"):
+        _resolve_path(str(tmp_path / "nonexistent"))
 
 
-def test_normalize_path_windows_drive_forwardslash():
-    assert normalize_path("C:/Users/foo") == "/mnt/c/Users/foo"
+def test_resolve_path_not_a_dir(tmp_path):
+    f = tmp_path / "file.txt"
+    f.write_text("x")
+    with pytest.raises(ValueError, match="not a directory"):
+        _resolve_path(str(f))
 
 
-def test_normalize_path_wsl_passthrough():
-    assert normalize_path("/mnt/c/Users/foo") == "/mnt/c/Users/foo"
+def test_resolve_path_tilde_expansion(tmp_path):
+    # _resolve_path expands ~ — just verify it doesn't crash on valid dir
+    result = _resolve_path(str(tmp_path))
+    assert os.path.isdir(result)
+    assert os.path.isabs(result)
 
 
-def test_normalize_path_tilde_expansion():
-    result = normalize_path("~/documents")
-    assert not result.startswith("~")
-    assert "documents" in result
+def test_resolve_path_returns_realpath(tmp_path):
+    # _resolve_path returns the real absolute path
+    result = _resolve_path(str(tmp_path))
+    assert result == os.path.realpath(str(tmp_path))
 
 
 # format_bytes

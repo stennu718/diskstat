@@ -1,22 +1,9 @@
 #!/usr/bin/env python3
 """Disk usage analyzer (WinDirStat-like). Scans a directory, then produces an HTML treemap + CSV report."""
 
-import os, sys, time, datetime, json, csv, pathlib, webbrowser, re, html as html_mod, subprocess
+import os, sys, time, datetime, json, csv, pathlib, webbrowser, html as html_mod, subprocess
 
 DEFAULT_TARGET = "/mnt/c/"
-WSL_DRIVE_RE = re.compile(r"^([A-Za-z]):[\\/].*")
-
-
-def normalize_path(p: str) -> str:
-    """Accept either Windows (C:\\...) or WSL/mount ( /mnt/c/...) paths."""
-    p = os.path.expanduser(p)
-    if WSL_DRIVE_RE.match(p):
-        drive = p[0].lower()
-        rest = p[2:].replace("\\", "/")
-        if not rest.startswith("/"):
-            rest = "/" + rest
-        p = "/mnt/" + drive + rest
-    return p
 
 
 EXT_COLORS = {
@@ -92,8 +79,7 @@ def format_bytes(b):
 
 
 def scan(path: str, on_progress=None):
-    path = normalize_path(path)
-    # Validate the path — missing target returns empty result rather than crashing
+    # Windows path normalisation is handled by _resolve_path
     try:
         path = _resolve_path(path)
     except (ValueError, OSError):
@@ -340,7 +326,7 @@ def main():
 
         result = {
             "ok": True,
-            "target": normalize_path(target),
+            "target": os.path.realpath(target),
             "stats": stats,
             "total_bytes": total,
             "total_human": format_bytes(total),
@@ -366,7 +352,7 @@ def main():
             sys.stdout.write("\r" + line[:100].ljust(100))
             sys.stdout.flush()
 
-        print(f"{C.BOLD}DiskStat{C.RESET} — scanning {C.CYAN}{normalize_path(target)}{C.RESET}")
+        print(f"{C.BOLD}DiskStat{C.RESET} — scanning {C.CYAN}{os.path.realpath(target)}{C.RESET}")
         tree, stats = scan(target, on_progress=on_progress if args.progress else None)
         total = tree.get("size", 0)
 
