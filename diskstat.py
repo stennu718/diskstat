@@ -295,7 +295,7 @@ def _write_csv(flat, csv_path):
             ])
 
 
-def render_html(tree_data, flat, output_html, csv_path):
+def render_html(tree_data, flat, output_html, csv_path, skip_html=False):
     """Render the WinDirStat-like HTML report from a template file."""
     all_nodes = [n for n in flat if n.get("parent") is not None]
     total_size = sum(n.get("size", 0) for n in all_nodes)
@@ -307,11 +307,11 @@ def render_html(tree_data, flat, output_html, csv_path):
         files=total_files, dirs=total_dirs, total=format_bytes(total_size)
     )
 
-    template_path = _find_template()
-    html = _render_template(template_path, root_name, stats_line, flat, EXT_COLORS)
-
-    with open(output_html, "w", encoding="utf-8") as f:
-        f.write(html)
+    if not skip_html:
+        template_path = _find_template()
+        html = _render_template(template_path, root_name, stats_line, flat, EXT_COLORS)
+        with open(output_html, "w", encoding="utf-8") as f:
+            f.write(html)
 
     _write_csv(flat, csv_path)
 
@@ -338,6 +338,21 @@ def _make_colors(enabled):
     return type("C", (), {
         "CYAN": "", "GREEN": "", "YELLOW": "", "RED": "", "BOLD": "", "DIM": "", "RESET": "",
     })()
+
+
+def _load_config(path):
+    """Load config from YAML or JSON file. Returns dict of settings."""
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Config file not found: {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        if path.endswith((".yaml", ".yml")):
+            try:
+                import yaml
+                return yaml.safe_load(f) or {}
+            except ImportError:
+                raise ImportError("PyYAML required for .yaml config: pip install pyyaml")
+        else:
+            return json.load(f)
 
 
 def _parse_args():
@@ -367,7 +382,13 @@ def _parse_args():
                     help=f"Max scan depth (default: {_MAX_SCAN_DEPTH})")
     ap.add_argument("--dry-run", action="store_true",
                     help="Scan only, do not write HTML/CSV files")
-    ap.add_argument("--version", action="version", version="%(prog)s 1.1.2")
+    ap.add_argument("--no-html", action="store_true",
+                    help="Skip HTML report generation (CSV only)")
+    ap.add_argument("--config", type=str, default=None,
+                    help="Path to YAML/JSON config file with default settings")
+    ap.add_argument("--compare", type=str, default=None,
+                    help="Path to baseline CSV to compare against (shows added/removed/changed)")
+    ap.add_argument("--version", action="version", version="%(prog)s 1.2.0")
     args = ap.parse_args()
     args.max_nodes = max(1, min(int(args.max_nodes), 500_000))
     args.min_size = max(0, args.min_size)
@@ -376,6 +397,36 @@ def _parse_args():
     if args.max_depth < 1:
         args.max_depth = 1
     return args
+
+
+def _compare_reports(current_flat, baseline_path):
+    """Compare current scan against a baseline CSV. Returns (added, removed, changed)."""
+    if not os.path.isfile(baseline_path):
+        raise FileNotFoundError(f"Baseline not found: {baseline_path}")
+
+    # Build lookup: name -> size from current
+    current = {n["name"]: n["size"] for n in current_flat if n.get("parent") is not None}
+
+    # Read baseline
+    baseline = {}
+    with open(baseline_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            name = row.get("name", "")
+            try:
+                size = int(row.get("size_bytes", 0))
+            except ValueError:
+                size = 0
+            baseline[name] = size
+
+    added = {k: current[k] for k in current if k not in baseline}
+    removed = {k: baseline[k] for k in baseline if k not in current}
+    changed = {}
+    for k in current:
+        if k in baseline and current[k] != baseline[k]:
+            changed[k] = (baseline[k], current[k])
+
+    return added, removed, changed
 
 
 def _output_json(tree, stats, flat, target, html_out, csv_out, dry_run=False):
@@ -429,6 +480,27 @@ def _open_report(html_out):
 def main():
     args = _parse_args()
 
+    # Load config file if specified and apply defaults
+    config = {}
+    if args.config:
+        try:
+            config = _load_config(args.config)
+        except (FileNotFoundError, ImportError) as exc:
+            print(f"Config error: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+    # Config values fill in missing args (CLI flags always override)
+    if not args.exclude and config.get("exclude"):
+        args.exclude = config["exclude"]
+    if not args.category and config.get("category"):
+        args.category = config["category"]
+    if args.max_nodes == 5000 and config.get("max_nodes"):
+        args.max_nodes = int(config["max_nodes"])
+    if args.min_size == 0 and config.get("min_size"):
+        args.min_size = int(config["min_size"])
+    if args.max_depth == _MAX_SCAN_DEPTH and config.get("max_depth"):
+        args.max_depth = int(config["max_depth"])
+
     target = args.path
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     out_dir = args.out or os.path.join(os.getcwd(), "diskstat", ts)
@@ -458,7 +530,7 @@ def main():
             exclude_dirs=args.exclude or None,
         )
         if not args.dry_run:
-            render_html(tree, flat, html_out, csv_out)
+            render_html(tree, flat, html_out, csv_out, skip_html=args.no_html)
         stats["total_bytes"] = tree.get("size", 0)
         _output_json(tree, stats, flat, target, html_out, csv_out, dry_run=args.dry_run)
     else:
@@ -496,7 +568,7 @@ def main():
             flat = [n for n in flat if n.get("parent") is None or filter_re.search(n.get("name", ""))]
 
         if not args.dry_run:
-            render_html(tree, flat, html_out, csv_out)
+            render_html(tree, flat, html_out, csv_out, skip_html=args.no_html)
 
         stats["total_bytes"] = tree.get("size", 0)
         stats["filter"] = args.filter
@@ -525,6 +597,32 @@ def main():
             for i, n in enumerate(top_n, 1):
                 size_str = format_bytes(n.get("size", 0))
                 print(f"  {C.CYAN}{i:>4}{C.RESET}. {size_str:>12}  {n.get('name', '?')}")
+
+        # Compare against baseline if requested
+        if args.compare:
+            try:
+                added, removed, changed = _compare_reports(flat, args.compare)
+            except FileNotFoundError as exc:
+                print(f"\n{C.RED}Compare error: {exc}{C.RESET}")
+            else:
+                total_add = sum(added.values())
+                total_rem = sum(removed.values())
+                total_chg = sum(abs(c[1] - c[0]) for c in changed.values())
+                print(f"\n{C.BOLD}Compare vs {args.compare}:{C.RESET}")
+                print(f"  {C.GREEN}Added:{C.RESET}   {len(added):>5} files  {format_bytes(total_add)}")
+                print(f"  {C.RED}Removed:{C.RESET} {len(removed):>5} files  {format_bytes(total_rem)}")
+                print(f"  {C.YELLOW}Changed:{C.RESET} {len(changed):>5} files  {format_bytes(total_chg)}")
+                if added:
+                    print(f"\n  {C.GREEN}New files (top 5):{C.RESET}")
+                    for name, size in sorted(added.items(), key=lambda x: -x[1])[:5]:
+                        print(f"    {format_bytes(size):>12}  {name}")
+                if changed:
+                    print(f"\n  {C.YELLOW}Changed (top 5 by delta):{C.RESET}")
+                    top_chg = sorted(changed.items(), key=lambda x: abs(x[1][1] - x[1][0]), reverse=True)[:5]
+                    for name, (old, new_sz) in top_chg:
+                        delta = new_sz - old
+                        sign = "+" if delta >= 0 else "-"
+                        print(f"    {sign}{format_bytes(abs(delta)):>12}  {name}")
 
     if args.open:
         _open_report(html_out)

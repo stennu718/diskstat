@@ -681,6 +681,115 @@ def test_build_flat_with_exclude_dirs(tmp_path):
     assert "config" not in names
 
 
+def test_main_no_html_flag(tmp_path):
+    """--no-html should skip HTML generation but still write CSV."""
+    (tmp_path / "a.txt").write_text("hello")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir), "--no-html"]
+        main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    htmls = list(out_dir.glob("*.html"))
+    csvs = list(out_dir.glob("*.csv"))
+    assert len(htmls) == 0
+    assert len(csvs) == 1
+
+    # CSV should still have data
+    content = csvs[0].read_text()
+    assert "a.txt" in content
+
+
+def test_compare_reports(tmp_path):
+    """_compare_reports should detect added/removed/changed files."""
+    from diskstat import _compare_reports
+
+    # Create baseline CSV
+    baseline = tmp_path / "baseline.csv"
+    with open(baseline, "w", newline="") as f:
+        w = csv_mod.writer(f)
+        w.writerow(["name", "path", "size_bytes", "size_human", "category", "parent"])
+        w.writerow(["old_file.txt", "/tmp/old_file.txt", 100, "100.0 B", "doc", "root"])
+        w.writerow(["common.txt", "/tmp/common.txt", 200, "200.0 B", "doc", "root"])
+
+    # Current flat list
+    current_flat = [
+        {"name": "root", "parent": None, "size": 600},
+        {"name": "common.txt", "parent": "root", "size": 300},  # changed
+        {"name": "new_file.txt", "parent": "root", "size": 500},  # added
+    ]
+
+    added, removed, changed = _compare_reports(current_flat, str(baseline))
+    assert "new_file.txt" in added
+    assert "old_file.txt" in removed
+    assert "common.txt" in changed
+    assert changed["common.txt"] == (200, 300)
+
+
+def test_load_config_json(tmp_path):
+    """_load_config should parse JSON config."""
+    from diskstat import _load_config
+
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({
+        "exclude": [".git", "node_modules"],
+        "max_nodes": 100,
+        "min_size": 1024,
+    }))
+
+    cfg = _load_config(str(config_file))
+    assert cfg["exclude"] == [".git", "node_modules"]
+    assert cfg["max_nodes"] == 100
+    assert cfg["min_size"] == 1024
+
+
+def test_load_config_missing_file():
+    """_load_config should raise FileNotFoundError for missing file."""
+    from diskstat import _load_config
+
+    with pytest.raises(FileNotFoundError):
+        _load_config("/nonexistent/config.json")
+
+
+def test_main_compare_flag(tmp_path):
+    """--compare should show comparison output."""
+    (tmp_path / "a.txt").write_text("hello")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    # Create baseline CSV
+    baseline = tmp_path / "baseline.csv"
+    with open(baseline, "w", newline="") as f:
+        w = csv_mod.writer(f)
+        w.writerow(["name", "path", "size_bytes", "size_human", "category", "parent"])
+        w.writerow(["old.txt", "/tmp/old.txt", 100, "100.0 B", "doc", "root"])
+
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    buf = io.StringIO()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir),
+                    "--compare", str(baseline), "--no-color"]
+        with redirect_stdout(buf):
+            main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    out = buf.getvalue()
+    assert "Compare" in out
+    assert "Added" in out
+    assert "Removed" in out
+
+
 def test_scan_max_depth_override(tmp_path):
     """scan() should respect max_depth parameter."""
     # Create nested dirs: root/d0/d1/d2/d3
