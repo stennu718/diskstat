@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Disk Usage - /mnt/c/Users/LocalAdmin/diskstat/C:\Users\LocalAdmin\Downloads</title>
+<style>
+:root {
+  --bg:#0b0d10; --panel:#111418; --panel2:#1b1f26; --text:#e6e8eb; --muted:#7a8595; --line:#252b33; --accent:#0ea5e9;
+}
+* { box-sizing: border-box; }
+html,body { height:100%; margin:0; background:var(--bg); color:var(--text); font:14px/1.4 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+header { position:sticky; top:0; z-index:10; background:#0d1117ee; backdrop-filter:saturate(140%) blur(6px); border-bottom:1px solid var(--line); padding:14px 18px 10px; }
+.wrap { display:grid; grid-template-columns: 1fr 380px; gap:0; height: calc(100vh - 58px); }
+#viz { overflow:hidden; }
+aside { border-left:1px solid var(--line); background:var(--panel); padding:14px; overflow:auto; }
+.h1 { margin:0 0 6px; font-size:16px; font-weight:600; letter-spacing:.2px; }
+.info { color:var(--muted); font-size:12px; }
+.legend { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:10px; }
+.chip { display:inline-flex; align-items:center; gap:7px; background:var(--panel2); border:1px solid #222833; padding:3px 8px; border-radius:999px; font-size:11px; color:#cfd6e0; }
+.dot { width:10px; height:10px; border-radius:50%; display:inline-block; border:1px solid #2a3140; }
+path { cursor:pointer; }
+.bar { height:14px; margin-top:6px; }
+input[type=text] { width:100%; padding:7px 8px; border-radius:6px; border:1px solid #2c333d; background:#0c1015; color:#e6e8eb; outline:none; }
+a { color:#bde0fe; text-decoration:none; }
+a:hover { text-decoration:underline; }
+.table { width:100%; border-collapse:collapse; margin-top:12px; }
+.table th { text-align:left; color:#9aa5b2; font-weight:500; font-size:11px; padding:6px 4px; }
+.table td { padding:6px 4px; border-top:1px solid #1d222b; font-size:12px; color:#cdd4de; }
+.table tr:hover td { background:#0f1318; }
+.badge { display:inline-block; padding:1px 7px; border-radius:999px; background:#1b1f26; border:1px solid #2a3140; font-size:10px; color:#9aa5b2; }
+.tooltip { position:fixed; background:#0f1418ee; border:1px solid #2a3140; padding:7px 9px; border-radius:7px; font-size:12px; pointer-events:none; opacity:0; transition:opacity .08s; max-width:440px; }
+.small { color:#7a8595; font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="h1">WinDirStat for Windows - /mnt/c/Users/LocalAdmin/diskstat/C:\Users\LocalAdmin\Downloads</div>
+  <div class="info">Scanned items shown below. Rectangles are sized by size. Legend by extension. Click a region to zoom. Ctrl+. to reset.</div>
+  <div class="legend" id="legend"></div>
+  <div style="margin-top:10px;">
+    <input type="text" id="filter" placeholder="Filter paths…" autocomplete="off"/>
+    <div class="small">Filter matches name/path. Table below is live-filtered.</div>
+  </div>
+</header>
+<div class="wrap">
+  <div id="viz"></div>
+  <aside>
+    <div class="info">Breadcrumb: <span id="breadcrumb">/</span></div>
+    <div class="info" id="selection" style="margin-top:8px"></div>
+    <div class="small">Open in Explorer:</div>
+    <div id="actions" style="margin-top:8px"></div>
+    <div class="small" style="margin-top:18px;">Top folders/files in view</div>
+    <table class="table">
+      <thead><tr><th>Name</th><th>Size</th><th>Type</th></tr></thead>
+      <tbody id="tbl"></tbody>
+    </table>
+  </aside>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const flat = [{"name": "/mnt/c/Users/LocalAdmin/diskstat/C:\\Users\\LocalAdmin\\Downloads", "path": "", "size": 0, "parent": null}];
+
+const folders = new Set(['folder']);
+const catColor = name => {
+  const c = flat.find(d => d.name === name);
+  if (!c) return '#cccccc';
+  return {"folder": "#1f77b4", "unknown": "#cccccc", "zip": "#ff7f0e", "image": "#9467bd", "video": "#d62728", "audio": "#8c564b", "doc": "#2ca02c", "code": "#17becf", "exe": "#e377c2", "font": "#bcbd22", "data": "#7f7f7f", "system": "#aec7e8"}[c.category] || '#cccccc';
+};
+const fmtBytes = n => {
+  if (!n && n !== 0) return '...';
+  if (n === 0) return '0 B';
+  const u = ['B','KB','MB','GB','TB'];
+  const i = Math.min(u.length-1, Math.max(0, Math.floor(Math.log(n)/Math.log(1024))));
+  return (n/1024**i).toFixed(1) + ' ' + u[i];
+};
+
+function buildRootData() {
+  const map = new Map();
+  for (const d of flat) map.set(d.name, d);
+  // root is first item without parent or name == ROOT path
+  const rootName = '/mnt/c/Users/LocalAdmin/diskstat/C:\Users\LocalAdmin\Downloads';
+  let root = flat.find(d => (d.parent == null) || d.name === rootName);
+  if (!root) root = flat[0];
+  // build children
+  const rootData = { name: root.name, path: root.path || '', size: root.size || 0, category: 'folder', children: [] };
+  const childrenMap = new Map();
+  for (const d of flat) {
+    if (d.parent == null || d.name === root.name) continue;
+    if (!childrenMap.has(d.parent)) childrenMap.set(d.parent, []);
+    childrenMap.get(d.parent).push(d);
+  }
+  const addRec = (n) => {
+    const arr = childrenMap.get(n) || [];
+    // small hack: if root is full path 'C:\' and no folder uses its parent name, keep as children.
+    for (const c of arr) {
+      c.children = [];
+      addRec(c.name);
+    }
+    n.children = arr;
+    n.size = arr.reduce((s,x)=>s+x.size, 0);
+  };
+  addRec(rootData);
+  if (rootData.size === 0 && rootData.children.length === 0) {
+    // fallback: render flat as children of root
+    rootData.children = flat.filter(x => x.name !== rootData.name);
+    rootData.size = rootData.children.reduce((s,x)=>s+x.size, 0);
+  }
+  return rootData;
+}
+
+function legend() {
+  const cats = ["folder", "unknown", "zip", "image", "video", "audio", "doc", "code", "exe", "font", "data", "system"];
+  const el = document.getElementById('legend');
+  el.innerHTML = '';
+  for (const c of cats) {
+    const s = document.createElement('span');
+    s.className = 'chip';
+    s.innerHTML = `<span class="dot" style="background:${catColor(c)}"></span>${c==='folder'?'folder':c==='unknown'?'unknown':c}`;
+    el.appendChild(s);
+  }
+}
+legend();
+
+// SVG treemap using d3.treemap(tiling)
+const rootData = buildRootData();
+// global size sum
+const sumSize = d3.hierarchy(rootData).sum(d => d.data.size || 0).value;
+document.getElementById('selection').textContent = `Total size: ${fmtBytes(sumSize)} - ${flat.length - (flat.filter(x=>x.category==='folder').length)} files`;
+
+let currentRootName = rootData.name;
+
+function renderTreemap(nodeData) {
+  const width = document.getElementById('viz').clientWidth || 900;
+  const height = document.getElementById('viz').clientHeight || 700;
+  const svg = d3.select('#viz').html('').append('svg').attr('width', width).attr('height', height);
+  const tooltip = document.getElementById('tooltip');
+  const root = d3.hierarchy(nodeData).sum(d => d.data.size || 0).sort((a,b) => b.value - a.value);
+  d3.treemap().size([width, height]).padding(2).tile(d3.treemapSquarify)(root);
+
+  const leaf = svg.selectAll('g').data(root.leaves()).join('g').attr('transform', d => `translate(${d.x0},${d.y0})`);
+  leaf.append('rect')
+    .attr('width', d => Math.max(0, d.x1 - d.x0))
+    .attr('height', d => Math.max(0, d.y1 - d.y0))
+    .attr('fill', d => {
+      const c = d.data.data || d.data;
+      const cat = (c.category || (c.children ? 'folder' : 'unknown'));
+      return catColor(cat === 'folder' ? c.name : cat);
+    })
+    .attr('stroke', '#0b0d10').attr('stroke-width', 1)
+    .on('mousemove', (e, d) => {
+      const c = d.data.data || d.data;
+      tooltip.style.opacity = 1;
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY + 12) + 'px';
+      tooltip.innerHTML = `<b>${escapeHtml(c.name)}</b><br/>${fmtBytes(c.size || 0)}<br/><span style="color:#8b97a6">${c.path || ''}</span>`;
+    })
+    .on('mouseleave', () => tooltip.style.opacity = 0)
+    .on('click', (e, d) => {
+      const c = d.data.data || d.data;
+      if (c.children && c.path) {
+        navigateInto(c);
+      } else {
+        copyPath(c.path || '');
+      }
+    });
+  leaf.append('text')
+    .attr('x', 3).attr('y', 13).attr('fill', '#eaf0f6').attr('font-size', 10)
+    .text(d => {
+      const c = d.data.data || d.data;
+      const w = d.x1 - d.x0;
+      if (w < 38) return '';
+      const t = c.name;
+      return t.length > Math.floor((w)/7) ? t.slice(0, Math.floor((w)/7)) + '…' : t;
+    });
+
+  document.getElementById('breadcrumb').textContent = (nodeData.path || nodeData.name);
+  updateTable(nodeData);
+}
+
+function escapeHtml(s) {
+  return String(s||'').replace(/[&<>']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\'':'&apos;'}[c]));
+}
+
+function childrenFor(parentName) {
+  return flat.filter(x => x.parent === parentName);
+}
+
+function navigateInto(node) {
+  const childrenData = childrenFor(node.name);
+  let nd = { name: node.name, path: node.path, size: node.size || 0, category: 'folder', children: (childrenData.length ? childrenData : []) };
+  renderTreemap(nd);
+}
+renderTreemap(rootData);
+
+function updateTable(nodeData) {
+  let rows = [];
+  if (nodeData.children && nodeData.children.length) {
+    rows = nodeData.children.slice().sort((a,b) => b.size - a.size);
+  } else {
+    rows = flat.filter(x => x.parent === nodeData.name).sort((a,b) => b.size - a.size);
+  }
+  const filter = document.getElementById('filter').value.trim().toLowerCase();
+  if (filter) {
+    rows = rows.filter(r => (r.name + ' ' + (r.path||'')).toLowerCase().includes(filter));
+  }
+  rows = rows.slice(0, 150);
+  const tb = document.getElementById('tbl');
+  tb.innerHTML = '';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><a href="#" class="show">${escapeHtml(r.name)}</a><div class="small">${escapeHtml((r.path||'')).replace(/^C:\\/i,'C:\')}</div></td>
+    <td>${fmtBytes(r.size)}</td><td><span class="badge">${escapeHtml(r.category)}</span></td>`;
+    tr.addEventListener('click', () => {
+      if (r.path) openExplorer(r.path);
+    });
+    tb.appendChild(tr);
+  }
+  tb.querySelectorAll('a.show').forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    const tr = a.closest('tr');
+    const p = tr.querySelector('.small').textContent;
+    if (p) openExplorer(p);
+  }));
+}
+
+document.getElementById('filter').addEventListener('input', () => updateTable(currentRoot or rootData));
+
+function openExplorer(p) {
+  if (Array.isArray(window.__openExplorer)) window.__openExplorer(p);
+  else alert(p);
+}
+
+function copyPath(p) {
+  if (navigator.clipboard) navigator.clipboard.writeText(p);
+}
+window.addEventListener('resize', () => renderTreemap(currentRootData || rootData));
+
+/* Bridge back to host for delete / explorer opening */
+window.__flat = flat;
+</script>
+</body>
+</html>

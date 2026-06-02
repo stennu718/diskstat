@@ -240,6 +240,43 @@ def render_html(tree_data, flat, target, output_html, csv_path):
             )
 
 
+def _supports_color():
+    """Check if stdout supports ANSI colors."""
+    if os.getenv("NO_COLOR"):
+        return False
+    if os.getenv("FORCE_COLOR"):
+        return True
+    try:
+        return sys.stdout.isatty()
+    except Exception:
+        return False
+
+
+class _Colors:
+    """ANSI color codes (no-op when colors unsupported)."""
+    def __init__(self, enabled):
+        if enabled:
+            self.CYAN = "\033[36m"
+            self.GREEN = "\033[32m"
+            self.YELLOW = "\033[33m"
+            self.RED = "\033[31m"
+            self.BOLD = "\033[1m"
+            self.DIM = "\033[2m"
+            self.RESET = "\033[0m"
+        else:
+            self.CYAN = self.GREEN = self.YELLOW = self.RED = self.BOLD = self.DIM = self.RESET = ""
+
+
+def _progress_bar(current, total, width=30):
+    """Return a simple ASCII progress bar string."""
+    if total <= 0:
+        return ""
+    filled = int(width * current / total)
+    bar = "█" * filled + "░" * (width - filled)
+    pct = current / total * 100
+    return f"[{bar}] {pct:.0f}%"
+
+
 def main():
     import argparse
 
@@ -248,6 +285,9 @@ def main():
     ap.add_argument("-o", "--out", default=None, help="Output directory")
     ap.add_argument("--open", action="store_true", help="Open HTML report after generation")
     ap.add_argument("-m", "--max-nodes", type=int, default=5000, help="Max nodes to include in visualization")
+    ap.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
+    ap.add_argument("--no-color", action="store_true", help="Disable colored output")
+    ap.add_argument("--progress", action="store_true", help="Show live progress during scan")
     args = ap.parse_args()
 
     # Clamp max_nodes to a sane range to prevent accidental DoS / OOM
@@ -259,17 +299,63 @@ def main():
     html_out = os.path.join(out_dir, "report.html")
     csv_out = os.path.join(out_dir, "files.csv")
 
-    print(f"Scanning: {normalize_path(target)}")
-    tree, stats = scan(target)
-    total = tree.get("size", 0)
-    print(
-        f"Done: {stats['elapsed_s']}s | {stats['dirs']} dirs, {stats['files']} files, {stats['skipped']} skipped | {format_bytes(total)} total"
-    )
+    use_color = not args.no_color and _supports_color()
+    C = _Colors(use_color)
 
-    flat = build_flat(tree, max_nodes=int(args.max_nodes))
-    render_html(tree, flat, target, html_out, csv_out)
-    print(f"HTML : {html_out}")
-    print(f"CSV  : {csv_out}")
+    if args.format == "json":
+        # JSON mode: structured output, no colors
+        def on_progress(directory, files, dirs):
+            pass  # no progress in JSON mode
+
+        tree, stats = scan(target, on_progress=on_progress if args.progress else None)
+        total = tree.get("size", 0)
+        flat = build_flat(tree, max_nodes=int(args.max_nodes))
+        render_html(tree, flat, target, html_out, csv_out)
+
+        result = {
+            "ok": True,
+            "target": normalize_path(target),
+            "stats": stats,
+            "total_bytes": total,
+            "total_human": format_bytes(total),
+            "nodes_included": len(flat),
+            "output": {
+                "html": html_out,
+                "csv": csv_out,
+            },
+        }
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        # Text mode: human-readable with optional colors + progress
+        _last_progress = {"files": 0, "dirs": 0, "time": time.time()}
+
+        def on_progress(directory, files, dirs):
+            now = time.time()
+            if now - _last_progress["time"] < 0.5:
+                return  # throttle to 2 updates/sec
+            _last_progress.update({"files": files, "dirs": dirs, "time": now})
+            d = os.path.basename(directory) or directory
+            line = f"  {C.DIM}...{d}{C.RESET}  {C.CYAN}{files} files{C.RESET}  {C.GREEN}{dirs} dirs{C.RESET}"
+            # Overwrite current line
+            sys.stdout.write("\r" + line[:100].ljust(100))
+            sys.stdout.flush()
+
+        print(f"{C.BOLD}DiskStat{C.RESET} — scanning {C.CYAN}{normalize_path(target)}{C.RESET}")
+        tree, stats = scan(target, on_progress=on_progress if args.progress else None)
+        total = tree.get("size", 0)
+
+        # Clear progress line
+        if args.progress:
+            sys.stdout.write("\r" + " " * 100 + "\r")
+            sys.stdout.flush()
+
+        print(f"{C.GREEN}✓{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
+        print(f"  {stats['dirs']} dirs  {stats['files']} files  {stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
+
+        flat = build_flat(tree, max_nodes=int(args.max_nodes))
+        render_html(tree, flat, target, html_out, csv_out)
+        print(f"  {C.CYAN}HTML{C.RESET} : {html_out}")
+        print(f"  {C.CYAN}CSV {C.RESET} : {csv_out}")
     if args.open:
         # WSL: use cmd.exe /c start (opens in Windows browser)
         # Fallback: xdg-open on Linux native

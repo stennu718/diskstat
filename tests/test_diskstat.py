@@ -247,7 +247,7 @@ def test_main_scans_target_writes_report(tmp_path):
     assert htmls[0].exists()
     assert csvs[0].exists()
     out = buf.getvalue()
-    assert "Scanning:" in out or "Done:" in out
+    assert "scanning" in out.lower() or "Done" in out
     assert "dirs" in out or "files" in out
 
 
@@ -273,8 +273,7 @@ def test_main_reports_live_progress(tmp_path):
         os.chdir(old_cwd)
 
     out = buf.getvalue()
-    assert "Scanning:" in out
-
+    assert "scanning" in out.lower() or "Done:" in out
 
 
 
