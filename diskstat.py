@@ -344,7 +344,7 @@ def _output_json(tree, stats, flat, target, html_out, csv_out):
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
-def _output_text(tree, stats, flat, target, html_out, csv_out, args, C):
+def _output_text(tree, stats, target, html_out, csv_out, C):
     total = tree.get("size", 0)
     print(f"{C.BOLD}DiskStat{C.RESET} — {C.CYAN}{os.path.realpath(target)}{C.RESET}")
     print(f"{C.GREEN}✓{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
@@ -414,7 +414,7 @@ def main():
             exclude_dirs=args.exclude or None,
         )
         render_html(tree, flat, target, html_out, csv_out)
-        _output_text(tree, stats, flat, target, html_out, csv_out, args, C)
+        _output_text(tree, stats, target, html_out, csv_out, C)
 
     if args.open:
         _open_report(html_out)
