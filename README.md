@@ -48,7 +48,7 @@ python diskstat.py /home/user/Downloads -o /tmp/my-report
 
 ```powershell
 # Windows PowerShell
-docker run --rm -v C:\:/mnt/c -v %USERPROFILE%\Downloads\diskstat-output:/out `
+docker run --rm -v C:\:/mnt/c -v ${HOME}\diskstat-output:/out `
   ghcr.io/y84312/diskstat:latest /mnt/c/ -o /out
 ```
 
@@ -60,12 +60,15 @@ Või topeltklõpsa `docker-build-run.ps1`.
 python diskstat.py [PATH] [OPTIONS]
 
 Options:
-  -o, --out DIR       Väljundkaust (vaikimisi: diskstat/YYYYMMDD_HHMMSS)
-  --open              Ava HTML raport peale loomist
-  -m, --max-nodes N   Maksimaalse arv visualiseerimiseks (1-500000, vaikimisi 5000)
-  --format {text,json} Väljundi formaat
-  --progress          Kuva skaneerimise edenemist
-  --no-color          Väljasta ilma värvideta
+  -o, --out DIR          Väljundkaust (vaikimisi: diskstat/YYYYMMDD_HHMMSS)
+  --open                 Ava HTML raport peale loomist
+  -m, --max-nodes N      Maksimaalse arv visualiseerimiseks (1-500000, vaikimisi 5000)
+  --format {text,json}   Väljundi formaat
+  --progress             Kuva skaneerimise edenemist
+  --no-color             Väljasta ilma värvideta
+  --min-size BYTES      Jäta väiksemad failid välja
+  --category CAT         Filtreeri kategooriale (mitmekordne)
+  --exclude DIR          Jäta kataloog välja (mitmekordne: .git, node_modules)
 ```
 
 ## Docker image
@@ -85,7 +88,7 @@ uv tool run pytest tests/ -v
 - **Python 3.11+**, ainult stdlib (ei välis sõltuvusi)
 - **D3.js** treemap visuaalisatsioon HTML-s
 - **Zero-config**: `python diskstat.py` töötab kohe
-- **Turvaline**: XSS guard, subprocess.shell=False, max_nodes clamp, D3 SRI
+- **Turvaline**: XSS guard, subprocess.shell=False, max_nodes clamp, CSP meta tag
 
 ## Litsents
 
