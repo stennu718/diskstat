@@ -388,6 +388,8 @@ def _parse_args():
                     help="Path to YAML/JSON config file with default settings")
     ap.add_argument("--compare", type=str, default=None,
                     help="Path to baseline CSV to compare against (shows added/removed/changed)")
+    ap.add_argument("--reverse", action="store_true",
+                    help="Reverse sort order (smallest first)")
     ap.add_argument("--version", action="version", version="%(prog)s 1.2.0")
     args = ap.parse_args()
     args.max_nodes = max(1, min(int(args.max_nodes), 500_000))
@@ -590,8 +592,10 @@ def main():
             files_only = [n for n in flat if n.get("category") != "folder" and n.get("parent") is not None]
             if args.sort == "name":
                 files_only.sort(key=lambda n: n.get("name", "").lower())
+                if args.reverse:
+                    files_only.reverse()
             else:
-                files_only.sort(key=lambda n: n.get("size", 0), reverse=True)
+                files_only.sort(key=lambda n: n.get("size", 0), reverse=not args.reverse)
             top_n = files_only[:args.top]
             print(f"\n{C.BOLD}Top {args.top} files (--sort {args.sort}):{C.RESET}")
             for i, n in enumerate(top_n, 1):
@@ -614,11 +618,14 @@ def main():
                 print(f"  {C.YELLOW}Changed:{C.RESET} {len(changed):>5} files  {format_bytes(total_chg)}")
                 if added:
                     print(f"\n  {C.GREEN}New files (top 5):{C.RESET}")
-                    for name, size in sorted(added.items(), key=lambda x: -x[1])[:5]:
+                    adder = sorted(added.items(), key=lambda x: -x[1])
+                    if args.reverse:
+                        adder = adder[::-1]
+                    for name, size in adder[:5]:
                         print(f"    {format_bytes(size):>12}  {name}")
                 if changed:
                     print(f"\n  {C.YELLOW}Changed (top 5 by delta):{C.RESET}")
-                    top_chg = sorted(changed.items(), key=lambda x: abs(x[1][1] - x[1][0]), reverse=True)[:5]
+                    top_chg = sorted(changed.items(), key=lambda x: abs(x[1][1] - x[1][0]), reverse=not args.reverse)[:5]
                     for name, (old, new_sz) in top_chg:
                         delta = new_sz - old
                         sign = "+" if delta >= 0 else "-"

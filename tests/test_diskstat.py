@@ -930,5 +930,56 @@ def test_timestamp_microsecond_no_conflict(tmp_path):
     assert len(ts) == 22  # YYYYMMDD_HHMMSS_ffffff
 
 
+def test_top_n_with_reverse_size_sort(tmp_path):
+    """--reverse with --sort size should show smallest files first."""
+    files = [("a.bin", 500), ("b.bin", 100), ("c.bin", 300)]
+    for name, sz in files:
+        (tmp_path / name).write_bytes(b"\x00" * sz)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    buf = io.StringIO()
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir),
+                    "--no-color", "--top", "2", "--sort", "size", "--reverse"]
+        with redirect_stdout(buf):
+            main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    output = buf.getvalue()
+    # Smallest 2 first: b.bin (100), c.bin (300)
+    lines = [ln for ln in output.splitlines() if ".bin" in ln]
+    assert "b.bin" in lines[0]
 
 
+def test_top_n_with_reverse_name_sort(tmp_path):
+    """--reverse with --sort name should reverse alphabetical order."""
+    for name in ["aaa.txt", "bbb.txt", "ccc.txt"]:
+        (tmp_path / name).write_text("x" * 100)
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    buf = io.StringIO()
+    old_argv = sys.argv
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(str(tmp_path))
+        sys.argv = ["diskstat.py", str(tmp_path), "-o", str(out_dir),
+                    "--no-color", "--top", "2", "--sort", "name", "--reverse"]
+        with redirect_stdout(buf):
+            main()
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    output = buf.getvalue()
+    lines = [ln for ln in output.splitlines() if ".txt" in ln]
+    # Reversed alpha = ccc, bbb
+    assert "ccc.txt" in lines[0]
