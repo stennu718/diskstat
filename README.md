@@ -66,10 +66,29 @@ Options:
   --format {text,json}   Väljundi formaat
   --progress             Kuva skaneerimise edenemist
   --no-color             Väljasta ilma värvideta
-  --min-size BYTES      Jäta väiksemad failid välja
+  --min-size BYTES       Jäta väiksemad failid välja
   --category CAT         Filtreeri kategooriale (mitmekordne)
   --exclude DIR          Jäta kataloog välja (mitmekordne: .git, node_modules)
-```
+  --sort {size,name}     Sortimise järjekord (vaikimisi: size)
+  --top N                Kuva top N suurimat faili (0 = kõik)
+  --filter REGEX         Regex filter failinimedele (case-insensitive)
+  --max-depth N          Maksimaalse skaneerimise sügavus (vaikimisi 256)
+  --dry-run              Skanneeri ainult, ära kirjuta faile
+  --no-html              Jäta HTML genereerimata (ainult CSV)
+  --config FILE          YAML/JSON konfiguratsioonifail vaikesätete jaoks
+  --compare BASELINE     Võrdle baseline CSV-ga (näita lisatud/eemaldatud/muutunud)
+  --version              Kuva versioon
+  --help                 Kuva abiinfo
+
+Näited:
+  # Võrdle kahte skaneerimist
+  python diskstat.py /mnt/c/ --compare baseline.csv
+
+  # Kasuta konfiguratsioonifaili
+  python diskstat.py /mnt/c/ --config diskstat.json
+
+  # Bash autocomplete (source completions/diskstat.bash)
+  source completions/diskstat.bash
 
 ## Docker image
 
