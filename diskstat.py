@@ -402,7 +402,7 @@ def main():
             sys.stdout.write(f"\r  {C.DIM}...{d}{C.RESET}  {C.CYAN}{files} f{C.RESET}  {C.GREEN}{dirs} d{C.RESET}"[:100].ljust(100))
             sys.stdout.flush()
 
-        print(f"{C.BOLD}DiskStat{C.RESET} — scanning {C.CYAN}{os.path.realpath(target)}{C.RESET}")
+        print(f"{C.BOLD}DiskStat{C.RESET} — scanning {C.CYAN}{target}{C.RESET}")
         cb = on_progress if args.progress else None
         tree, stats = scan(target, on_progress=cb)
 
