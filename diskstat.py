@@ -316,9 +316,8 @@ def _make_colors(enabled):
     })()
 
 
-def main():
+def _parse_args():
     import argparse
-
     ap = argparse.ArgumentParser(description="Disk usage analyzer (WinDirStat-like) for Windows/WSL")
     ap.add_argument("path", nargs="?", default="/mnt/c/", help="Path to scan (default: /mnt/c/)")
     ap.add_argument("-o", "--out", default=None, help="Output directory")
@@ -331,10 +330,45 @@ def main():
     ap.add_argument("--category", action="append", default=[], help="Filter by category (can repeat)")
     ap.add_argument("--exclude", action="append", default=[], help="Exclude dir names (can repeat: .git, node_modules)")
     args = ap.parse_args()
-
-    # Clamp max_nodes to a sane range to prevent accidental DoS / OOM
     args.max_nodes = max(1, min(int(args.max_nodes), 500_000))
     args.min_size = max(0, args.min_size)
+    return args
+
+
+def _output_json(tree, stats, flat, target, html_out, csv_out):
+    total = tree.get("size", 0)
+    result = {
+        "ok": True,
+        "target": os.path.realpath(target),
+        "stats": stats,
+        "total_bytes": total,
+        "total_human": format_bytes(total),
+        "nodes_included": len(flat),
+        "output": {"html": html_out, "csv": csv_out},
+    }
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def _output_text(tree, stats, flat, target, html_out, csv_out, args, C):
+    total = tree.get("size", 0)
+    print(f"{C.BOLD}DiskStat{C.RESET} — {C.CYAN}{os.path.realpath(target)}{C.RESET}")
+    print(f"{C.GREEN}✓{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
+    print(f"  {stats['dirs']} dirs  {stats['files']} files  {stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
+    print(f"  {C.CYAN}HTML{C.RESET} : {html_out}")
+    print(f"  {C.CYAN}CSV {C.RESET} : {csv_out}")
+
+
+def _open_report(html_out):
+    if os.path.exists("/mnt/c/Windows/System32/cmd.exe"):
+        cmd_path = "/mnt/c/Windows/System32/cmd.exe"
+        html_win = html_out.replace("/mnt/c/", "C:\\").replace("/", "\\")
+        subprocess.run([cmd_path, "/c", "start", "", html_win], shell=False)
+    else:
+        webbrowser.open("file://" + html_out)
+
+
+def main():
+    args = _parse_args()
 
     target = args.path
     out_dir = args.out or os.path.join(os.getcwd(), "diskstat", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
@@ -346,12 +380,7 @@ def main():
     C = _make_colors(use_color)
 
     if args.format == "json":
-        # JSON mode: structured output, no colors
-        def on_progress(directory, files, dirs):
-            pass  # no progress in JSON mode
-
-        tree, stats = scan(target, on_progress=on_progress if args.progress else None)
-        total = tree.get("size", 0)
+        tree, stats = scan(target)
         flat = build_flat(
             tree,
             max_nodes=int(args.max_nodes),
@@ -360,47 +389,28 @@ def main():
             exclude_dirs=args.exclude or None,
         )
         render_html(tree, flat, target, html_out, csv_out)
-
-        result = {
-            "ok": True,
-            "target": os.path.realpath(target),
-            "stats": stats,
-            "total_bytes": total,
-            "total_human": format_bytes(total),
-            "nodes_included": len(flat),
-            "output": {
-                "html": html_out,
-                "csv": csv_out,
-            },
-        }
-        print(json.dumps(result, indent=2, ensure_ascii=False))
+        _output_json(tree, stats, flat, target, html_out, csv_out)
     else:
-        # Text mode: human-readable with optional colors + progress
-        _last_progress = {"files": 0, "dirs": 0, "time": time.time()}
+        # Text mode
+        _last_p = {"files": 0, "dirs": 0, "time": time.time()}
 
         def on_progress(directory, files, dirs):
             now = time.time()
-            if now - _last_progress["time"] < 0.5:
-                return  # throttle to 2 updates/sec
-            _last_progress.update({"files": files, "dirs": dirs, "time": now})
+            if now - _last_p["time"] < 0.5:
+                return
+            _last_p.update({"files": files, "dirs": dirs, "time": now})
             d = os.path.basename(directory) or directory
-            line = f"  {C.DIM}...{d}{C.RESET}  {C.CYAN}{files} files{C.RESET}  {C.GREEN}{dirs} dirs{C.RESET}"
-            # Overwrite current line
-            sys.stdout.write("\r" + line[:100].ljust(100))
+            sys.stdout.write(f"\r  {C.DIM}...{d}{C.RESET}  {C.CYAN}{files} f{C.RESET}  {C.GREEN}{dirs} d{C.RESET}"[:100].ljust(100))
             sys.stdout.flush()
 
         print(f"{C.BOLD}DiskStat{C.RESET} — scanning {C.CYAN}{os.path.realpath(target)}{C.RESET}")
-        tree, stats = scan(target, on_progress=on_progress if args.progress else None)
-        total = tree.get("size", 0)
+        cb = on_progress if args.progress else None
+        tree, stats = scan(target, on_progress=cb)
 
-        # Clear progress line
         if args.progress:
             sys.stdout.write("\r" + " " * 100 + "\r")
             sys.stdout.flush()
 
-        print(f"{C.GREEN}✓{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
-        print(f"  {stats['dirs']} dirs  {stats['files']} files  {stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
-
         flat = build_flat(
             tree,
             max_nodes=int(args.max_nodes),
@@ -409,17 +419,10 @@ def main():
             exclude_dirs=args.exclude or None,
         )
         render_html(tree, flat, target, html_out, csv_out)
-        print(f"  {C.CYAN}HTML{C.RESET} : {html_out}")
-        print(f"  {C.CYAN}CSV {C.RESET} : {csv_out}")
+        _output_text(tree, stats, flat, target, html_out, csv_out, args, C)
+
     if args.open:
-        # WSL: use cmd.exe /c start (opens in Windows browser)
-        # Fallback: xdg-open on Linux native
-        if os.path.exists("/mnt/c/Windows/System32/cmd.exe"):
-            cmd_path = "/mnt/c/Windows/System32/cmd.exe"
-            html_win = html_out.replace("/mnt/c/", "C:\\").replace("/", "\\")
-            subprocess.run([cmd_path, "/c", "start", "", html_win], shell=False)
-        else:
-            webbrowser.open("file://" + html_out)
+        _open_report(html_out)
 
 
 if __name__ == "__main__":
