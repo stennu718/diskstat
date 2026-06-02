@@ -196,7 +196,7 @@ def test_render_html_contains_color_mapping(tmp_path):
     flat = build_flat(tree, max_nodes=10)
     htmlp = tmp_path / "color.html"
     csvp = tmp_path / "color.csv"
-    render_html(tree, flat, "/mnt/data", str(htmlp), str(csvp))
+    render_html(tree, flat, str(htmlp), str(csvp))
     text = htmlp.read_text(encoding="utf-8")
     # Template must embed category color mapping.
     assert '"folder": "#1f77b4"' in text
@@ -212,7 +212,7 @@ def test_render_html_file_list_includes_tooltip_attrs(tmp_path):
     flat = build_flat(tree, max_nodes=10)
     htmlp = tmp_path / "groups.html"
     csvp = tmp_path / "groups.csv"
-    render_html(tree, flat, "/mnt/data", str(htmlp), str(csvp))
+    render_html(tree, flat, str(htmlp), str(csvp))
     text = htmlp.read_text(encoding="utf-8")
     # Must have the flat data and color config embedded
     assert "colors" in text
@@ -227,7 +227,7 @@ def test_render_html_csv_has_correct_columns(tmp_path):
     flat = build_flat(tree, max_nodes=5)
     html = tmp_path / "h.html"
     csvp = tmp_path / "c.csv"
-    render_html(tree, flat, "/mnt/x", str(html), str(csvp))
+    render_html(tree, flat, str(html), str(csvp))
     rows = csvp.read_text(encoding="utf-8").splitlines()
     assert rows[0].split(",") == ["name", "path", "size_bytes", "size_human", "category", "parent"]
     assert len(rows) >= 2

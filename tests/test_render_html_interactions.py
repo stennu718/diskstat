@@ -43,7 +43,7 @@ def test_render_html_uses_addEventListener(tmp_path: Path):
     flat = build_flat(tree, max_nodes=10)
     htmlp = tmp_path / "addEventListener.html"
     csvp = tmp_path / "addEventListener.csv"
-    render_html(tree, flat, "/mnt/data", str(htmlp), str(csvp))
+    render_html(tree, flat, str(htmlp), str(csvp))
     text = htmlp.read_text(encoding="utf-8")
     assert "addEventListener" in text
     assert "window.open" in text
@@ -55,7 +55,7 @@ def test_render_html_includes_flat_json_and_legend(tmp_path: Path):
     flat = build_flat(tree, max_nodes=10)
     htmlp = tmp_path / "flat.html"
     csvp = tmp_path / "flat.csv"
-    render_html(tree, flat, "/mnt/data", str(htmlp), str(csvp))
+    render_html(tree, flat, str(htmlp), str(csvp))
     text = htmlp.read_text(encoding="utf-8")
     assert "d3.v7.min.js" in text
     assert "treemap" in text

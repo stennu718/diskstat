@@ -3,8 +3,6 @@
 
 import os, sys, time, datetime, json, csv, pathlib, webbrowser, html as html_mod, subprocess, argparse
 
-DEFAULT_TARGET = "/mnt/c/"
-
 
 EXT_COLORS = {
     "folder": "#1f77b4",
@@ -266,7 +264,7 @@ def _write_csv(flat, csv_path):
             ])
 
 
-def render_html(tree_data, flat, target, output_html, csv_path):
+def render_html(tree_data, flat, output_html, csv_path):
     """Render the WinDirStat-like HTML report from a template file."""
     all_nodes = [n for n in flat if n.get("parent") is not None]
     total_size = sum(n.get("size", 0) for n in all_nodes)
@@ -387,7 +385,7 @@ def main():
             categories=args.category or None,
             exclude_dirs=args.exclude or None,
         )
-        render_html(tree, flat, target, html_out, csv_out)
+        render_html(tree, flat, html_out, csv_out)
         _output_json(tree, stats, flat, target, html_out, csv_out)
     else:
         # Text mode
@@ -417,7 +415,7 @@ def main():
             categories=args.category or None,
             exclude_dirs=args.exclude or None,
         )
-        render_html(tree, flat, target, html_out, csv_out)
+        render_html(tree, flat, html_out, csv_out)
         stats["total_bytes"] = tree.get("size", 0)
         _output_text(stats, target, html_out, csv_out, C)
 
