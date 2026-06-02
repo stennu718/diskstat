@@ -1,0 +1,15 @@
+.venv
+__pycache__
+.pytest_cache
+*.pyc
+*.pyo
+.git
+.gitignore
+*.md
+!README*
+*.log
+report.html
+files.csv
+diskstat.py.bak
+tests/test_diskstat.py.bak
+TDD_NEXT_STEPS.txt
