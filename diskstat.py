@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """Disk usage analyzer (WinDirStat-like). Scans a directory, then produces an HTML treemap + CSV report."""
 
-import os, sys, time, datetime, json, csv, pathlib, webbrowser, html as html_mod, subprocess, argparse
+import os
+import sys
+import time
+import datetime
+import json
+import csv
+import pathlib
+import webbrowser
+import html as html_mod
+import subprocess
+import argparse
 
 
 EXT_COLORS = {
@@ -24,8 +34,17 @@ EXT_MAP = {
     "image": {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".ico", ".avif"},
     "video": {".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".m2ts", ".vob"},
     "audio": {".mp3", ".wav", ".aac", ".flac", ".m4a", ".wma", ".ogg", ".opus", ".aiff", ".alac"},
-    "doc": {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".txt", ".rtf", ".csv", ".md", ".pages", ".key", ".numbers"},
-    "code": {".py", ".js", ".ts", ".java", ".c", ".cpp", ".h", ".cs", ".go", ".rs", ".php", ".rb", ".swift", ".kt", ".scala", ".html", ".css", ".scss", ".less", ".sql", ".sh", ".bat", ".ps1", ".psm1", ".vue", ".jsx", ".tsx", ".json", ".yaml", ".yml", ".toml", ".xml", ".ini", ".cfg", ".conf"},
+    "doc": {
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+        ".odt", ".ods", ".odp", ".txt", ".rtf", ".csv", ".md",
+        ".pages", ".key", ".numbers",
+    },
+    "code": {
+        ".py", ".js", ".ts", ".java", ".c", ".cpp", ".h", ".cs", ".go", ".rs",
+        ".php", ".rb", ".swift", ".kt", ".scala", ".html", ".css", ".scss",
+        ".less", ".sql", ".sh", ".bat", ".ps1", ".psm1", ".vue", ".jsx",
+        ".tsx", ".json", ".yaml", ".yml", ".toml", ".xml", ".ini", ".cfg", ".conf",
+    },
     "exe": {".exe", ".dll", ".so", ".dylib", ".bin", ".msi", ".app", ".apk", ".ipa"},
     "font": {".ttf", ".otf", ".woff", ".woff2", ".eot", ".fnt", ".fon"},
     "data": {".db", ".sqlite", ".sqlite3", ".mdb", ".accdb", ".dat", ".log", ".iso", ".img", ".bak", ".tmp", ".cache"},
@@ -141,7 +160,7 @@ def scan(path: str, on_progress=None):
     # If the target was deleted between validation and scan, handle gracefully
     try:
         _walk(path, tree)
-    except (OSError, PermissionError) as e:
+    except (OSError, PermissionError):
         # Target became inaccessible during scan — return empty result
         pass
     return tree, {
@@ -231,10 +250,14 @@ def build_flat(tree, max_nodes=5000, min_size=0, categories=None, exclude_dirs=N
 def _find_template():
     """Locate template.html — checks submodule then project root."""
     here = os.path.dirname(os.path.abspath(__file__))
-    for p in [os.path.join(here, "diskstat", "template.html"), os.path.join(here, "template.html")]:
+    _candidates = [
+        os.path.join(here, "diskstat", "template.html"),
+        os.path.join(here, "template.html"),
+    ]
+    for p in _candidates:
         if os.path.exists(p):
             return p
-    raise FileNotFoundError(f"template.html not found. Searched: {[os.path.join(here, 'diskstat', 'template.html'), os.path.join(here, 'template.html')]}")
+    raise FileNotFoundError(f"template.html not found. Searched: {_candidates}")
 
 
 def _render_template(template_path, root_name, stats_line, flat, colors):
@@ -269,7 +292,7 @@ def render_html(tree_data, flat, output_html, csv_path):
     all_nodes = [n for n in flat if n.get("parent") is not None]
     total_size = sum(n.get("size", 0) for n in all_nodes)
     total_files = sum(1 for n in all_nodes if n.get("category") != "folder")
-    total_dirs  = sum(1 for n in all_nodes if n.get("category") == "folder")
+    total_dirs = sum(1 for n in all_nodes if n.get("category") == "folder")
 
     root_name = tree_data.get("name", "ROOT")
     stats_line = "{files} files, {dirs} dirs | {total} total".format(
@@ -318,11 +341,16 @@ def _parse_args():
     ap.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
     ap.add_argument("--no-color", action="store_true", help="Disable colored output")
     ap.add_argument("--progress", action="store_true", help="Show live progress during scan")
-    ap.add_argument("--min-size", type=int, default=0, help="Minimum file size in bytes (default: 0)")
-    ap.add_argument("--category", action="append", default=[], help="Filter by category (can repeat)")
-    ap.add_argument("--exclude", action="append", default=[], help="Exclude dir names (can repeat: .git, node_modules)")
-    ap.add_argument("--sort", choices=["size", "name"], default="size", help="Sort flat list by size or name (default: size)")
-    ap.add_argument("--top", type=int, default=0, help="Show only top N largest files (0 = all)")
+    ap.add_argument("--min-size", type=int, default=0,
+                    help="Minimum file size in bytes (default: 0)")
+    ap.add_argument("--category", action="append", default=[],
+                    help="Filter by category (can repeat)")
+    ap.add_argument("--exclude", action="append", default=[],
+                    help="Exclude dir names (can repeat: .git, node_modules)")
+    ap.add_argument("--sort", choices=["size", "name"], default="size",
+                    help="Sort flat list by size or name (default: size)")
+    ap.add_argument("--top", type=int, default=0,
+                    help="Show only top N largest files (0 = all)")
     args = ap.parse_args()
     args.max_nodes = max(1, min(int(args.max_nodes), 500_000))
     args.min_size = max(0, args.min_size)
@@ -350,7 +378,8 @@ def _output_text(stats, target, html_out, csv_out, C):
     root = stats.get("root", target)
     print(f"{C.BOLD}DiskStat{C.RESET} — {C.CYAN}{root}{C.RESET}")
     print(f"{C.GREEN}✓{C.RESET} Done in {C.BOLD}{stats['elapsed_s']}s{C.RESET}")
-    print(f"  {stats['dirs']} dirs  {stats['files']} files  {stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
+    print(f"  {stats['dirs']} dirs  {stats['files']} files  "
+          f"{stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
     print(f"  {C.CYAN}HTML{C.RESET} : {html_out}")
     print(f"  {C.CYAN}CSV {C.RESET} : {csv_out}")
 
@@ -397,7 +426,8 @@ def main():
                 return
             _last_p.update({"files": files, "dirs": dirs, "time": now})
             d = os.path.basename(directory) or directory
-            sys.stdout.write(f"\r  {C.DIM}...{d}{C.RESET}  {C.CYAN}{files} f{C.RESET}  {C.GREEN}{dirs} d{C.RESET}"[:100].ljust(100))
+            line = f"\r  {C.DIM}...{d}{C.RESET}  {C.CYAN}{files} f{C.RESET}  {C.GREEN}{dirs} d{C.RESET}"
+            sys.stdout.write(line[:100].ljust(100))
             sys.stdout.flush()
 
         print(f"{C.BOLD}DiskStat{C.RESET} — scanning {C.CYAN}{target}{C.RESET}")
