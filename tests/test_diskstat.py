@@ -719,18 +719,18 @@ def test_compare_reports(tmp_path):
         w.writerow(["old_file.txt", "/tmp/old_file.txt", 100, "100.0 B", "doc", "root"])
         w.writerow(["common.txt", "/tmp/common.txt", 200, "200.0 B", "doc", "root"])
 
-    # Current flat list
+    # Current flat list (path is the unique key now)
     current_flat = [
-        {"name": "root", "parent": None, "size": 600},
-        {"name": "common.txt", "parent": "root", "size": 300},  # changed
-        {"name": "new_file.txt", "parent": "root", "size": 500},  # added
+        {"name": "root", "path": "/tmp", "parent": None, "size": 600},
+        {"name": "common.txt", "path": "/tmp/common.txt", "parent": "root", "size": 300},  # changed
+        {"name": "new_file.txt", "path": "/tmp/new_file.txt", "parent": "root", "size": 500},  # added
     ]
 
     added, removed, changed = _compare_reports(current_flat, str(baseline))
-    assert "new_file.txt" in added
-    assert "old_file.txt" in removed
-    assert "common.txt" in changed
-    assert changed["common.txt"] == (200, 300)
+    assert "/tmp/new_file.txt" in added
+    assert "/tmp/old_file.txt" in removed
+    assert "/tmp/common.txt" in changed
+    assert changed["/tmp/common.txt"] == (200, 300)
 
 
 def test_load_config_json(tmp_path):

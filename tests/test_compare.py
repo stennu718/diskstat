@@ -53,9 +53,6 @@ class TestCompareReportsEdgeCases:
         flat = _make_flat([("a.txt", 100)])
         added, removed, changed = _compare_reports(flat, str(csv_path))
         # size_bytes missing -> defaults to 0, so a.txt size 100 != 0 -> changed
-        # Actually: row.get("size_bytes", 0) returns "0" string, int("0") = 0
-        # So a.txt is in current (100) and baseline (0) -> changed
-        # Let's just verify it doesn't crash and returns dicts
         assert isinstance(added, dict)
         assert isinstance(removed, dict)
         assert isinstance(changed, dict)
@@ -68,9 +65,9 @@ class TestCompareReportsEdgeCases:
             w.writerow(["name", "path", "size_bytes", "size_human", "category", "parent"])
         flat = _make_flat([("a.txt", 100), ("b.txt", 200)])
         added, removed, changed = _compare_reports(flat, str(csv_path))
-        assert set(added.keys()) == {"a.txt", "b.txt"}
-        assert added["a.txt"] == 100
-        assert added["b.txt"] == 200
+        assert set(added.keys()) == {"/tmp/a.txt", "/tmp/b.txt"}
+        assert added["/tmp/a.txt"] == 100
+        assert added["/tmp/b.txt"] == 200
         assert removed == {}
         assert changed == {}
 
@@ -92,8 +89,8 @@ class TestCompareReportsEdgeCases:
         added, removed, changed = _compare_reports(flat, str(csv_path))
         assert added == {}
         assert removed == {}
-        assert "a.txt" in changed
-        assert changed["a.txt"] == (100, 500)  # (baseline_size, current_size)
+        assert "/tmp/a.txt" in changed
+        assert changed["/tmp/a.txt"] == (100, 500)  # (baseline_size, current_size)
 
     def test_removed_file(self, tmp_path):
         """A file in baseline but not in current should appear in removed dict."""
@@ -102,8 +99,8 @@ class TestCompareReportsEdgeCases:
         flat = _make_flat([("a.txt", 100)])
         added, removed, changed = _compare_reports(flat, str(csv_path))
         assert added == {}
-        assert "b.txt" in removed
-        assert removed["b.txt"] == 200
+        assert "/tmp/b.txt" in removed
+        assert removed["/tmp/b.txt"] == 200
         assert changed == {}
 
     def test_added_file(self, tmp_path):
@@ -112,7 +109,23 @@ class TestCompareReportsEdgeCases:
         _write_csv_row(csv_path, [("a.txt", 100)])
         flat = _make_flat([("a.txt", 100), ("c.txt", 300)])
         added, removed, changed = _compare_reports(flat, str(csv_path))
-        assert "c.txt" in added
-        assert added["c.txt"] == 300
+        assert "/tmp/c.txt" in added
+        assert added["/tmp/c.txt"] == 300
         assert removed == {}
         assert changed == {}
+
+    def test_same_name_different_path(self, tmp_path):
+        """Files with same name but different paths should be treated as separate."""
+        csv_path = tmp_path / "baseline.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["name", "path", "size_bytes", "size_human", "category", "parent"])
+            w.writerow(["a.txt", "/tmp/dir1/a.txt", 100, "100 B", "doc", "root"])
+        # Current has a.txt in different dir
+        flat = _make_flat([("a.txt", 200)])  # path = /tmp/a.txt
+        added, removed, changed = _compare_reports(flat, str(csv_path))
+        # /tmp/a.txt is added, /tmp/dir1/a.txt is removed (different paths)
+        assert "/tmp/a.txt" in added
+        assert added["/tmp/a.txt"] == 200
+        assert "/tmp/dir1/a.txt" in removed
+        assert removed["/tmp/dir1/a.txt"] == 100

@@ -409,20 +409,20 @@ def _compare_reports(current_flat, baseline_path):
     if not os.path.isfile(baseline_path):
         raise FileNotFoundError(f"Baseline not found: {baseline_path}")
 
-    # Build lookup: name -> size from current
-    current = {n["name"]: n["size"] for n in current_flat if n.get("parent") is not None}
+    # Build lookup: path -> size from current (path is unique, name is not)
+    current = {n["path"]: n["size"] for n in current_flat if n.get("parent") is not None and n.get("path")}
 
     # Read baseline
     baseline = {}
     with open(baseline_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            name = row.get("name", "")
+            path = row.get("path", "")
             try:
                 size = int(row.get("size_bytes", 0))
             except ValueError:
                 size = 0
-            baseline[name] = size
+            baseline[path] = size
 
     added = {k: current[k] for k in current if k not in baseline}
     removed = {k: baseline[k] for k in baseline if k not in current}
