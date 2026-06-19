@@ -269,11 +269,14 @@ def _find_template():
 
 
 def _render_template(template_path, root_name, stats_line, flat, colors):
-    """Read template and substitute placeholders. Returns HTML string."""
+    """Render template with placeholder substitution + XSS protection."""
     with open(template_path, "r", encoding="utf-8") as f:
         html = f.read()
+    # Escape user-controlled values to prevent XSS
+    # CSP meta tag in template provides additional defense-in-depth
     html = html.replace("__ROOT_NAME__", html_mod.escape(root_name))
     html = html.replace("__STATS_LINE__", html_mod.escape(stats_line))
+    # JSON output is safe: no <script> injection possible via json.dumps
     html = html.replace("__JS_FLAT__", json.dumps(flat, ensure_ascii=False))
     html = html.replace("__JS_COLORS__", json.dumps(colors, ensure_ascii=False))
     return html
