@@ -57,5 +57,6 @@ _complete_diskstat() {
     COMPREPLY=( $(compgen -d -- "${cur}") )
 }
 
+complete -F _complete_diskstat diskstat
 complete -F _complete_diskstat python
 complete -F _complete_diskstat python3

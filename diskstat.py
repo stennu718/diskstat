@@ -175,7 +175,7 @@ def scan(path: str, on_progress=None, max_depth=None):
         "files": scanned_files,
         "dirs": scanned_dirs,
         "skipped": skipped,
-        "elapsed_s": round(time.time() - t0, 3),
+        "elapsed_s": round(max(0.0, time.time() - t0), 3),
         "root": path,
     }
 
