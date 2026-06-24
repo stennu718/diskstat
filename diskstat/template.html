@@ -3,406 +3,617 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://d3js.org; style-src 'self' 'unsafe-inline'; connect-src 'none'; font-src 'none';"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://d3js.org; style-src 'self' 'unsafe-inline'; connect-src 'none'; font-src 'none';"/>
 <title>Disk Usage - __ROOT_NAME__</title>
 <style>
 :root {
-  --bg:#0b0d10;--panel:#111418;--panel2:#1b1f26;--text:#e6e8eb;--muted:#7a8595;--line:#252b33;--accent:#0ea5e9;
+  --bg:#f5f5f0; --panel:#fff; --panel2:#f0f0eb; --panel3:#e8e8e2; --text:#1a1a1a; --muted:#666; --line:#d0d0c8;
+  --accent:#c8792a; --accent2:#8b5e2a; --hover:#fff3e0;
+  --folder:#e8d4a0; --folder-border:#c4a86a;
 }
 * { box-sizing:border-box; }
-html,body { height:100%; margin:0; background:var(--bg); color:var(--text); font:13px/1.4 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+html,body { height:100%; margin:0; background:var(--bg); color:var(--text); font:12px/1.4 "Segoe UI",Tahoma,Helvetica,Arial,sans-serif; }
+body { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+
+/* === HEADER === */
 header {
-  position:sticky; top:0; z-index:10;
-  background:#0d1117ee; backdrop-filter:saturate(140%) blur(6px);
-  border-bottom:1px solid var(--line); padding:10px 16px 8px;
+  background:linear-gradient(180deg,#f8f8f4,#eae6de);
+  border-bottom:1px solid #b8b4a8; padding:6px 12px 4px; flex-shrink:0;
 }
-.h1 { margin:0 0 2px; font-size:15px; font-weight:600; }
-.sub { color:var(--muted); font-size:11px; margin-bottom:6px; }
-.legend { display:flex; flex-wrap:wrap; gap:4px 8px; margin:6px 0; }
-.chip { display:inline-flex; align-items:center; gap:5px; background:var(--panel2); border:1px solid #222833;
-        padding:2px 7px; border-radius:999px; font-size:10px; color:#cfd6e0; }
-.dot { width:9px; height:9px; border-radius:50%; display:inline-block; border:1px solid #2a3140; }
-.toolbar { display:flex; gap:8px; align-items:center; margin-top:4px; }
-.toolbar input[type=text] { flex:1; padding:5px 8px; border-radius:5px; border:1px solid #2c333d;
-  background:#0c1015; color:#e6e8eb; outline:none; font-size:12px; }
-.wrap { display:grid; grid-template-columns:1fr 380px; gap:0; height:calc(100vh - 108px); }
-#viz { overflow:hidden; background:var(--bg); }
-aside { border-left:1px solid var(--line); background:var(--panel); padding:10px; overflow:auto; display:flex; flex-direction:column; gap:10px; }
-.nav-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-.breadcrumb { font-size:11px; color:var(--muted); word-break:break-all; flex:1; }
-.btn { display:inline-flex; align-items:center; gap:4px; padding:4px 9px; border-radius:5px; border:1px solid #2c333d;
-  background:var(--panel2); color:var(--text); font-size:11px; cursor:pointer; transition:background .12s; }
-.btn:hover { background:#252b33; }
-.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
-.stat-cell { background:var(--panel2); border:1px solid #1e2430; border-radius:5px; padding:5px 7px; }
-.stat-cell .lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
-.stat-cell .val { font-size:13px; font-weight:600; }
+.row1 { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.h1 { font-size:13px; font-weight:600; color:#333; }
+.h1 .sub { font-size:10px; color:#777; font-weight:400; margin-left:6px; }
+
+/* === MAIN LAYOUT (3 panes like WinDirStat) === */
+.main { display:grid; grid-template-columns:260px 1fr 220px; gap:0; flex:1; min-height:0; }
+
+/* === LEFT: Directory Tree === */
+.tree-pane {
+  border-right:1px solid var(--line); background:var(--panel);
+  overflow:auto; padding:6px 0; font-size:12px;
+}
+.tree-node { white-space:nowrap; cursor:pointer; user-select:none; }
+.tree-node .node-row {
+  display:flex; align-items:center; gap:2px; padding:1px 8px 1px 4px;
+  border:1px solid transparent; border-radius:2px;
+}
+.tree-node .node-row:hover { background:var(--hover); }
+.tree-node .node-row.selected { background:#ffe0b2; border-color:#ffb74d; }
+.tree-node .twisty { width:14px; display:inline-block; text-align:center; font-size:9px; color:#888; flex-shrink:0; cursor:pointer; }
+.tree-node .icon { width:16px; display:inline-block; text-align:center; flex-shrink:0; font-size:11px; }
+.tree-node .name { flex:1; overflow:hidden; text-overflow:ellipsis; }
+.tree-node .size { color:#666; font-size:10px; margin-left:4px; white-space:nowrap; }
+.tree-children { padding-left:16px; }
+.tree-children.collapsed { display:none; }
+
+/* === CENTER: Treemap === */
+.treemap-pane {
+  overflow:hidden; background:#f0ede4; position:relative;
+  display:flex; flex-direction:column;
+}
+.treemap-header {
+  background:linear-gradient(180deg,#f4f1e9,#ebe7dc);
+  border-bottom:1px solid #c8c4b8; padding:4px 8px; font-size:11px; color:#555;
+  display:flex; align-items:center; gap:8px; flex-shrink:0;
+}
+.treemap-header .path { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.treemap-header .crumb { color:var(--accent); cursor:pointer; }
+.treemap-header .crumb:hover { text-decoration:underline; }
+.treemap-header .crumb.current { color:var(--text); cursor:default; font-weight:600; }
+.treemap-body { flex:1; overflow:hidden; position:relative; }
+.treemap-body svg { display:block; }
+
+/* === RIGHT: Extension List === */
+.ext-pane {
+  border-left:1px solid var(--line); background:var(--panel);
+  overflow:auto; padding:0; font-size:11px;
+}
+.ext-header {
+  background:linear-gradient(180deg,#f4f1e9,#ebe7dc);
+  border-bottom:1px solid #c8c4b8; padding:4px 8px;
+  font-weight:600; font-size:11px; color:#444; position:sticky; top:0;
+}
 .ext-table { width:100%; border-collapse:collapse; }
-.ext-table th { text-align:left; color:#9aa5b2; font-weight:500; font-size:10px; padding:3px 4px; border-bottom:1px solid #1d222b; }
-.ext-table td { padding:3px 4px; font-size:11px; color:#cdd4de; border-bottom:1px solid #151a20; }
-.ext-table tr:hover td { background:#0f1318; }
-.ext-bar { height:3px; border-radius:2px; margin-top:2px; }
-.file-section .title { font-size:11px; font-weight:600; color:var(--muted); margin-bottom:4px; }
-.table { width:100%; border-collapse:collapse; }
-.table th { text-align:left; color:#9aa5b2; font-weight:500; font-size:10px; padding:4px 3px; border-bottom:1px solid #1d222b; }
-.table td { padding:4px 3px; border-top:1px solid #151a20; font-size:11px; color:#cdd4de; vertical-align:middle; }
-.table tr:hover td { background:#0f1318; }
-a { color:#bde0fe; text-decoration:none; }
-.small { color:#7a8595; font-size:10px; }
-.badge { display:inline-block; padding:0 5px; border-radius:999px; background:var(--panel2); border:1px solid #2a3140; font-size:9px; color:#9aa5b2; }
-.pct { color:var(--muted); font-size:10px; }
-.name-cell { max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.tooltip { position:fixed; background:#0f1418ee; border:1px solid #2a3140; padding:7px 9px; border-radius:7px;
-  font-size:12px; pointer-events:none; opacity:0; transition:opacity .08s; max-width:440px; z-index:100; }
-.actions { display:flex; gap:6px; flex-wrap:wrap; }
+.ext-table th {
+  text-align:left; color:#555; font-weight:600; font-size:10px;
+  padding:3px 6px; border-bottom:1px solid #d8d4c8; cursor:pointer;
+  background:#f8f6ef; position:sticky; top:22px; user-select:none;
+}
+.ext-table th:hover { background:#f0ece2; }
+.ext-table td {
+  padding:2px 6px; border-bottom:1px solid #e8e4dc; cursor:pointer;
+  color:#333; vertical-align:middle;
+}
+.ext-table tr:hover td { background:var(--hover); }
+.ext-table tr.selected td { background:#ffe0b2; }
+.ext-swatch { width:12px; height:12px; border:1px solid #999; display:inline-block; vertical-align:middle; flex-shrink:0; }
+.ext-bar { height:8px; border-radius:1px; margin-top:1px; }
+.ext-pct { color:#888; font-size:9px; }
+
+/* === FOOTER: Stats Bar === */
+footer {
+  background:linear-gradient(180deg,#f0ede4,#e8e4da);
+  border-top:1px solid #b8b4a8; padding:3px 10px;
+  font-size:10px; color:#666; display:flex; gap:16px; flex-shrink:0;
+}
+
+/* === Tooltip === */
+.tooltip {
+  position:fixed; background:#fffde7; border:1px solid #c8b878; padding:6px 8px;
+  font-size:11px; pointer-events:none; opacity:0; transition:opacity .1s;
+  max-width:400px; z-index:100; box-shadow:2px 2px 6px rgba(0,0,0,.15);
+  border-radius:3px;
+}
+.tooltip .ttl { font-weight:600; margin-bottom:2px; }
+.tooltip .t-size { color:#8b5e2a; }
+.tooltip .t-path { color:#666; font-size:10px; word-break:break-all; margin-top:2px; }
+
+/* === Context Menu === */
+.ctx-menu {
+  position:fixed; background:var(--panel); border:1px solid #b0b0a0; border-radius:3px;
+  padding:2px 0; font-size:11px; z-index:200; min-width:160px;
+  box-shadow:3px 3px 8px rgba(0,0,0,.15); display:none;
+}
+.ctx-item { padding:4px 14px; cursor:pointer; color:var(--text); display:flex; gap:6px; align-items:center; }
+.ctx-item:hover { background:var(--hover); }
+.ctx-sep { height:1px; background:var(--line); margin:2px 0; }
+
+/* === Zoom Controls === */
+.zoom-controls { position:absolute; bottom:8px; right:8px; display:flex; gap:3px; z-index:5; }
+.zoom-btn {
+  width:24px; height:24px; border:1px solid #b0a890; background:#f8f6ef; color:#555;
+  font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  border-radius:3px; opacity:.8; transition:opacity .12s;
+}
+.zoom-btn:hover { opacity:1; background:var(--hover); }
+
+.hint { position:absolute;bottom:8px;left:8px;font-size:9px;color:#999;pointer-events:none;z-index:5; }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="h1">Disk Usage — __ROOT_NAME__</div>
-  <div class="sub">__STATS_LINE__</div>
-  <div class="legend" id="legend"></div>
-  <div class="toolbar">
-    <input type="text" id="filter" placeholder="Filter files by name or path…" autocomplete="off"/>
+  <div class="row1">
+    <div class="h1">&#128190; Disk Usage<span class="sub">__STATS_LINE__</span></div>
   </div>
 </header>
 
-<div class="wrap">
-  <div id="viz"></div>
-  <aside>
-    <div class="nav-row">
-      <button class="btn" id="btn-up" title="Go up one level">⬆ Up</button>
-      <button class="btn" id="btn-root" title="Back to root">⏏ Root</button>
-      <button class="btn" id="btn-reload" title="Reload">↻</button>
+<div class="main">
+  <!-- Left: Directory Tree -->
+  <div class="tree-pane" id="tree-pane"></div>
+
+  <!-- Center: Treemap -->
+  <div class="treemap-pane">
+    <div class="treemap-header" id="treemap-header"></div>
+    <div class="treemap-body" id="treemap-body">
+      <div class="hint">Scroll: zoom &middot; R: reload &middot; C: copy path &middot; Backspace: up &middot; Home: root &middot; right-click: menu</div>
+      <div class="zoom-controls">
+        <div class="zoom-btn" id="z-in" title="Zoom in">+</div>
+        <div class="zoom-btn" id="z-out" title="Zoom out">&minus;</div>
+        <div class="zoom-btn" id="z-reset" title="Reset">&#8635;</div>
+      </div>
     </div>
-    <div class="breadcrumb" id="breadcrumb">/</div>
-    <div class="stat-grid" id="stat-grid"></div>
+  </div>
+
+  <!-- Right: Extension List -->
+  <div class="ext-pane">
+    <div class="ext-header">Extension List</div>
     <table class="ext-table">
-      <thead><tr><th>Type</th><th>Size</th><th>%</th><th>#</th></tr></thead>
+      <thead><tr><th>Color</th><th>Name</th><th data-sort="size">Size &#9650;</th><th data-sort="pct">%</th><th data-sort="count">#</th></tr></thead>
       <tbody id="ext-body"></tbody>
     </table>
-    <div id="selection-info" class="small" style="color:var(--muted)"></div>
-    <div class="actions" id="actions"></div>
-    <div class="file-section">
-      <div class="title" id="file-title">Files in: /</div>
-      <table class="table">
-        <thead><tr><th>Name</th><th>Size</th><th></th></tr></thead>
-        <tbody id="tbl"></tbody>
-      </table>
-    </div>
-  </aside>
+  </div>
 </div>
+
+<footer id="footer"></footer>
+
 <div class="tooltip" id="tooltip"></div>
+<div class="ctx-menu" id="ctx-menu">
+  <div class="ctx-item" data-act="openfolder">&#128193; Open containing folder</div>
+  <div class="ctx-item" data-act="explore">&#128269; Explore here</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" data-act="copy">&#128203; Copy path</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" data-act="zoominto">&#128269; Zoom into this folder</div>
+</div>
 
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 // Injected data
-const flat = __JS_FLAT__;
-const colors = __JS_COLORS__;
+var flat = __JS_FLAT__;
+var colors = __JS_COLORS__;
 
 function catColor(cat) { return colors[cat] || "#999"; }
 function fmtBytes(n) {
-  if (!n && n !== 0) return "…";
+  if (!n && n !== 0) return "\u2026";
   if (n === 0) return "0 B";
   var u = ["B","KB","MB","GB","TB","PB"];
   var i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
   return (n/Math.pow(1024,i)).toFixed(1)+" "+u[i];
 }
-function pctStr(part, total) {
-  if (!total) return "0%";
-  return (part/total*100).toFixed(1)+"%";
-}
 function esc(s) {
   return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
-// Extension stats
-function extStats(nodes) {
-  var m = {};
-  for (var i=0; i<nodes.length; i++) {
-    var n = nodes[i];
-    if (!n.size) continue;
-    var cat = n.category || "unknown";
-    if (!m[cat]) m[cat] = { size:0, count:0 };
-    m[cat].size += n.size;
-    m[cat].count++;
-  }
-  var total = 0;
-  for (var k in m) total += m[k].size;
-  var arr = [];
-  for (var k in m) arr.push({ cat:k, size:m[k].size, count:m[k].count, total:total });
-  arr.sort(function(a,b){ return b.size-a.size; });
-  return arr;
-}
-
-// Legend
-(function(){
-  var el = document.getElementById("legend");
-  el.innerHTML = "";
-  var cats = Object.keys(colors);
-  for (var i=0; i<cats.length; i++) {
-    var c = cats[i];
-    var s = document.createElement("span");
-    s.className = "chip";
-    s.innerHTML = '<span class="dot" style="background:'+catColor(c)+'"></span>'+c;
-    el.appendChild(s);
-  }
-})();
-
-// Index
-var byName = {};
-var byParent = {};
+// === Build tree from flat data ===
+var rootNode = flat[0];
+var nodeMap = {};
 for (var i=0; i<flat.length; i++) {
   var n = flat[i];
-  byName[n.name] = n;
-  if (n.parent !== null && n.parent !== undefined) {
-    if (!byParent[n.parent]) byParent[n.parent] = [];
-    byParent[n.parent].push(n);
+  nodeMap[n.name] = n;
+  n._children = [];
+}
+for (var i=1; i<flat.length; i++) {
+  var n = flat[i];
+  var parent = n.parent ? nodeMap[n.parent] : null;
+  if (parent) parent._children.push(n);
+}
+
+// === State ===
+var currentNode = rootNode.name;
+var selectedNode = null;
+var extSortCol = "size";
+var extSortDir = -1;
+var treeExpanded = {};
+// Default: expand root
+treeExpanded[rootNode.name] = true;
+
+// === Directory Tree (left pane) ===
+function renderTree() {
+  var pane = document.getElementById("tree-pane");
+  pane.innerHTML = "";
+  function renderNode(node, depth) {
+    var hasKids = node._children && node._children.length > 0;
+    var isOpen = treeExpanded[node.name];
+    var div = document.createElement("div");
+    div.className = "tree-node";
+    var row = document.createElement("div");
+    row.className = "node-row" + (node.name === currentNode ? " selected" : "");
+    row.style.paddingLeft = (depth * 14 + 4) + "px";
+    row.innerHTML =
+      '<span class="twisty">' + (hasKids ? (isOpen ? '&#9660;' : '&#9656;') : '&nbsp;') + '</span>' +
+      '<span class="icon">' + (hasKids ? '&#128193;' : '&#128194;') + '</span>' +
+      '<span class="name">' + esc(node.name) + '</span>' +
+      '<span class="size">' + fmtBytes(node.size) + '</span>';
+    if (hasKids) {
+      row.querySelector(".twisty").onclick = function(e) {
+        e.stopPropagation();
+        treeExpanded[node.name] = !treeExpanded[node.name];
+        renderTree();
+      };
+    }
+    row.onclick = function() {
+      currentNode = node.name;
+      selectedNode = node;
+      renderTree();
+      renderTreemap();
+      updateHeader();
+      updateFooter();
+    };
+    div.appendChild(row);
+    if (hasKids && isOpen) {
+      var kids = document.createElement("div");
+      kids.className = "tree-children" + (isOpen ? "" : " collapsed");
+      var sorted = node._children.slice().sort(function(a,b){ return b.size - a.size; });
+      for (var i=0; i<sorted.length; i++) {
+        kids.appendChild(renderNode(sorted[i], depth + 1));
+      }
+      div.appendChild(kids);
+    }
+    return div;
+  }
+  pane.appendChild(renderNode(rootNode, 0));
+}
+
+// === Treemap Header (breadcrumbs) ===
+function updateHeader() {
+  var hdr = document.getElementById("treemap-header");
+  var parts = [];
+  var node = nodeMap[currentNode];
+  while (node) {
+    parts.unshift(node);
+    node = node.parent ? nodeMap[node.parent] : null;
+  }
+  var html = "";
+  for (var i=0; i<parts.length; i++) {
+    var p = parts[i];
+    if (i > 0) html += " &rsaquo; ";
+    if (i === parts.length - 1) {
+      html += '<span class="crumb current">' + esc(p.name) + '</span>';
+    } else {
+      html += '<span class="crumb" data-name="' + esc(p.name) + '">' + esc(p.name) + '</span>';
+    }
+  }
+  hdr.innerHTML = html;
+  var crumbs = hdr.querySelectorAll(".crumb[data-name]");
+  for (var i=0; i<crumbs.length; i++) {
+    crumbs[i].onclick = function() {
+      currentNode = this.dataset.name;
+      selectedNode = nodeMap[currentNode];
+      renderTree();
+      renderTreemap();
+      updateHeader();
+      updateFooter();
+    };
   }
 }
+
+// === Treemap Rendering (center pane) ===
 function childrenOf(name) {
-  var arr = byParent[name] || [];
-  arr.sort(function(a,b){ return b.size - a.size; });
-  return arr;
+  var node = nodeMap[name];
+  return node && node._children ? node._children : [];
 }
 
-var ROOT_NAME = flat[0].name;
-var historyStack = [ROOT_NAME];
-var currentNode = ROOT_NAME;
+function renderTreemap() {
+  var body = document.getElementById("treemap-body");
+  var existingSvg = body.querySelector("svg");
+  if (existingSvg) existingSvg.remove();
 
-// Render treemap
-function renderViz(nodeName) {
-  var kids = childrenOf(nodeName);
+  var kids = childrenOf(currentNode);
   if (!kids.length) {
-    d3.select("#viz").html("").append("div")
-      .style("display","flex").style("alignItems","center").style("justifyContent","center")
-      .style("height","100%").style("color","#555").style("fontSize","14px")
-      .text("(empty)");
-    updateTable([]);
-    document.getElementById("selection-info").textContent = "";
-    document.getElementById("actions").innerHTML = "";
+    body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:13px;">(empty folder)</div>' +
+      '<div class="hint">Scroll: zoom &middot; R: reload &middot; C: copy path &middot; Backspace: up &middot; Home: root &middot; right-click: menu</div>' +
+      '<div class="zoom-controls"><div class="zoom-btn" id="z-in" title="Zoom in">+</div><div class="zoom-btn" id="z-out" title="Zoom out">&minus;</div><div class="zoom-btn" id="z-reset" title="Reset">&#8635;</div></div>';
+    bindZoom();
     return;
   }
-  var total = 0;
-  for (var i=0;i<kids.length;i++) total += kids[i].size;
-  if (!total) total = 1;
 
-  var vizEl = document.getElementById("viz");
-  var width  = vizEl.clientWidth  || 800;
-  var height = vizEl.clientHeight || 600;
+  var container = body.getBoundingClientRect();
+  var width = container.width || 600;
+  var height = container.height || 400;
 
-  var root = d3.hierarchy({ name: nodeName, children: kids })
+  var root = d3.hierarchy({ name: currentNode, children: kids })
     .sum(function(d){ return d.size || 0; })
     .sort(function(a,b){ return b.value - a.value; });
-  d3.treemap().size([width, height]).padding(1).tile(d3.treemapSquarify)(root);
-  var leaves = root.leaves();
 
-  var svg = d3.select("#viz").html("")
-    .append("svg").attr("width", width).attr("height", height);
+  d3.treemap()
+    .size([width, height])
+    .paddingOuter(2)
+    .paddingInner(1)
+    .tile(d3.treemapSquarify)
+    .round(true)
+    (root);
+
+  var leaves = root.leaves();
+  var total = root.value || 1;
+
+  var svg = d3.select("#treemap-body").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+  // Define gradients for 3D effect
+  var defs = svg.append("defs");
+  var catKeys = Object.keys(colors);
+  for (var ci=0; ci<catKeys.length; ci++) {
+    var cat = catKeys[ci];
+    var baseColor = colors[cat];
+    var grad = defs.append("linearGradient")
+      .attr("id", "grad-" + cat)
+      .attr("x1", "0%").attr("y1", "0%")
+      .attr("x2", "0%").attr("y2", "100%");
+    grad.append("stop").attr("offset", "0%").attr("stop-color", d3.color(baseColor).brighter(0.3));
+    grad.append("stop").attr("offset", "50%").attr("stop-color", baseColor);
+    grad.append("stop").attr("offset", "100%").attr("stop-color", d3.color(baseColor).darker(0.2));
+  }
 
   var tooltip = document.getElementById("tooltip");
+
   var g = svg.selectAll("g").data(leaves).join("g")
-    .attr("transform", function(d){ return "translate("+d.x0+","+d.y0+")"; });
+    .attr("transform", function(d){ return "translate("+d.x0+","+d.y0+")"; })
+    .style("cursor", "pointer");
 
+  // 3D gradient effect (WinDirStat style - lighter top, darker bottom)
   g.append("rect")
-    .attr("width",  function(d){ return Math.max(0, d.x1-d.x0); })
+    .attr("width", function(d){ return Math.max(0, d.x1-d.x0); })
     .attr("height", function(d){ return Math.max(0, d.y1-d.y0); })
-    .attr("fill",   function(d){ return catColor(d.data.category||"unknown"); })
-    .attr("stroke", "#0b0d10").attr("stroke-width", 0.5)
-    .style("cursor", function(d){ return d.data.category==="folder"?"pointer":"default"; })
-    .on("mousemove", function(e, d) {
-      tooltip.style.opacity = "1";
-      tooltip.style.left = (e.clientX+14)+"px";
-      tooltip.style.top  = (e.clientY+14)+"px";
-      tooltip.innerHTML = "<b>"+esc(d.data.name)+"</b><br/>"+fmtBytes(d.data.size)+"&nbsp;&nbsp;("+pctStr(d.data.size,total)+")<br/><span style='color:#8b97a6;font-size:11px'>"+esc(d.data.path||"")+"</span>";
+    .attr("fill", function(d){ return "url(#grad-" + d.data.category + ")"; })
+    .attr("stroke", function(d){ return d3.color(catColor(d.data.category)).darker(0.5); })
+    .attr("stroke-width", 1)
+    .attr("rx", 1)
+    .on("mouseenter", function(event, d) {
+      var pct = (d.data.size / total * 100).toFixed(1);
+      tooltip.innerHTML = '<div class="ttl">' + esc(d.data.name) + '</div>' +
+        '<div class="t-size">' + fmtBytes(d.data.size) + ' (' + pct + '%)</div>' +
+        '<div class="t-path">' + esc(d.data.path || '') + '</div>';
+      tooltip.style.opacity = 1;
     })
-    .on("mouseleave", function(){ tooltip.style.opacity = "0"; })
-    .on("click", function(e, d) {
-      e.stopPropagation();
+    .on("mousemove", function(event) {
+      tooltip.style.left = (event.clientX + 12) + "px";
+      tooltip.style.top = (event.clientY - 10) + "px";
+    })
+    .on("mouseleave", function() { tooltip.style.opacity = 0; })
+    .on("click", function(event, d) {
+      selectedNode = d.data;
       if (d.data.category === "folder") {
-        navigateTo(d.data.name);
-      } else {
-        showFileActions(d.data);
+        currentNode = d.data.name;
+        treeExpanded[currentNode] = true;
+        renderTree();
+        renderTreemap();
+        updateHeader();
+        updateFooter();
       }
+      highlightExt(d.data.category);
+    })
+    .on("contextmenu", function(event, d) {
+      event.preventDefault();
+      selectedNode = d.data;
+      showContextMenu(event.clientX, event.clientY, d.data);
     });
 
+  // Size labels on blocks (only if big enough)
   g.append("text")
-    .attr("x", 3).attr("y", 13)
-    .attr("fill", "#fff").attr("font-size", 10)
-    .style("pointer-events","none")
-    .style("text-shadow","0 1px 3px rgba(0,0,0,.9)")
-    .text(function(d){
+    .attr("x", 3)
+    .attr("y", 13)
+    .attr("font-size", "9px")
+    .attr("fill", "#000")
+    .attr("opacity", 0.7)
+    .style("pointer-events", "none")
+    .text(function(d) {
       var w = d.x1 - d.x0;
-      var h = d.y1 - d.y0;
-      if (w < 30 || h < 12) return "";
-      var t = d.data.name;
-      var max = Math.max(3, Math.floor((w-6)/6.5));
-      return t.length > max ? t.slice(0,max-1)+"…" : t;
+      var label = fmtBytes(d.data.size);
+      return w > 35 ? label : "";
     });
 
-  updateTable(kids, total);
-  showFileActions(null);
+  bindZoom();
 }
 
-// Navigation
-function navigateTo(name) {
-  if (name === currentNode) return;
-  historyStack.push(name);
-  currentNode = name;
-  updateBreadcrumb();
-  renderViz(name);
+function bindZoom() {
+  var zin = document.getElementById("z-in");
+  var zout = document.getElementById("z-out");
+  var zreset = document.getElementById("z-reset");
+  if (zin) zin.onclick = function() { zoomTreemap(1.3); };
+  if (zout) zout.onclick = function() { zoomTreemap(0.75); };
+  if (zreset) zreset.onclick = function() { currentNode = rootNode.name; selectedNode = rootNode; renderTree(); renderTreemap(); updateHeader(); updateFooter(); };
 }
 
-function navigateUp() {
-  if (historyStack.length <= 1) return;
-  historyStack.pop();
-  currentNode = historyStack[historyStack.length-1];
-  updateBreadcrumb();
-  renderViz(currentNode);
-}
-
-function navigateRoot() {
-  historyStack = [ROOT_NAME];
-  currentNode = ROOT_NAME;
-  updateBreadcrumb();
-  renderViz(currentNode);
-}
-
-function updateBreadcrumb() {
-  var node = byName[currentNode] || {};
-  document.getElementById("breadcrumb").textContent = node.path || currentNode;
-  document.getElementById("file-title").textContent = "Files in: " + (node.path || currentNode);
-}
-
-// File table
-function updateTable(kids, total) {
-  if (!total) {
-    total = 0;
-    for (var i=0;i<kids.length;i++) total += kids[i].size;
-    if (!total) total = 1;
-  }
-  var rows = kids.slice().sort(function(a,b){ return b.size-a.size; });
-  var q = document.getElementById("filter").value.trim().toLowerCase();
-  if (q) {
-    rows = rows.filter(function(r){
-      return (r.name+" "+(r.path||"")).toLowerCase().indexOf(q) !== -1;
-    });
-  }
-  rows = rows.slice(0, 200);
-  var tb = document.getElementById("tbl");
-  tb.innerHTML = "";
-  for (var i=0; i<rows.length; i++) {
-    var r = rows[i];
-    var tr = document.createElement("tr");
-    var nameHref = "javascript:handleRowClick("+JSON.stringify(r.name)+",\""+r.category+"\")";
-    tr.innerHTML =
-      '<td><span class="dot" style="background:'+catColor(r.category)+'"></span><div class="name-cell"><a href="'+nameHref+'">'+esc(r.name)+'</a></div><div class="small">'+esc(r.path||"")+'</div></td>' +
-      '<td style="white-space:nowrap">'+fmtBytes(r.size)+' <span class="pct">'+pctStr(r.size,total)+'</span></td>' +
-      '<td><span class="badge">'+r.category+'</span></td>';
-    tb.appendChild(tr);
-  }
-}
-
-function handleRowClick(name, cat) {
-  if (cat === "folder") {
-    navigateTo(name);
+function zoomTreemap(factor) {
+  // Simple zoom: navigate into largest child or back up
+  if (factor > 1) {
+    var kids = childrenOf(currentNode);
+    if (kids.length) {
+      kids.sort(function(a,b){ return b.size - a.size; });
+      currentNode = kids[0].name;
+      treeExpanded[currentNode] = true;
+      renderTree();
+      renderTreemap();
+      updateHeader();
+      updateFooter();
+    }
   } else {
-    var n = byName[name];
-    if (n) showFileActions(n);
+    // Go up
+    var node = nodeMap[currentNode];
+    if (node && node.parent) {
+      currentNode = node.parent;
+      renderTree();
+      renderTreemap();
+      updateHeader();
+      updateFooter();
+    }
   }
 }
 
-// Actions
-function showFileActions(node) {
-  var infoEl = document.getElementById("selection-info");
-  var actEl  = document.getElementById("actions");
-  if (!node) { infoEl.textContent = ""; actEl.innerHTML = ""; return; }
-  infoEl.innerHTML = "<b>"+esc(node.name)+"</b> &mdash; "+fmtBytes(node.size)+" &mdash; <span class=\"badge\">"+node.category+"</span><br/><span class=\"small\">"+esc(node.path||"")+"</span>";
-  actEl.innerHTML = "";
-  if (node.path) {
-    var b1 = document.createElement("button");
-    b1.className = "btn";
-    b1.textContent = "\uD83D\uDCC2 Open folder";
-    b1.onclick = function(){ window.open("file://"+node.path, "_blank"); };
-    actEl.appendChild(b1);
-    var b2 = document.createElement("button");
-    b2.className = "btn";
-    b2.textContent = "\uD83D\uDCCB Copy path";
-    b2.onclick = function(){ navigator.clipboard.writeText(node.path); b2.textContent = "Copied!"; };
-    actEl.appendChild(b2);
-  }
-}
-
-// Sidebar stats
-function buildSidebarStats() {
-  var grid = document.getElementById("stat-grid");
-  var all = flat.filter(function(n){ return n.parent!==null; });
-  var totalSize = 0;
-  for (var i=0;i<all.length;i++) totalSize += all[i].size||0;
-  var totalFiles = all.filter(function(n){ return n.category!=="folder"; }).length;
-  var totalDirs = all.filter(function(n){ return n.category==="folder"; }).length;
-  var extSet = {};
-  for (var i=0;i<all.length;i++) extSet[all[i].category||"unknown"] = true;
-  grid.innerHTML =
-    '<div class="stat-cell"><div class="lbl">Total</div><div class="val">'+fmtBytes(totalSize)+'</div></div>' +
-    '<div class="stat-cell"><div class="lbl">Files</div><div class="val">'+totalFiles.toLocaleString()+'</div></div>' +
-    '<div class="stat-cell"><div class="lbl">Folders</div><div class="val">'+totalDirs.toLocaleString()+'</div></div>' +
-    '<div class="stat-cell"><div class="lbl">Types</div><div class="val">'+Object.keys(extSet).length+'</div></div>';
-}
-
-function buildExtTable() {
-  var all = flat.filter(function(n){ return n.parent!==null; });
+// === Extension List (right pane) ===
+function renderExtTable() {
+  var nodes = flat.slice(1); // skip root
+  var cats = {};
   var total = 0;
-  for (var i=0;i<all.length;i++) total += all[i].size||0;
-  if (!total) total = 1;
-  var stats = extStats(all).slice(0, 20);
+  for (var i=0; i<nodes.length; i++) {
+    var n = nodes[i];
+    var cat = n.category || "unknown";
+    if (!cats[cat]) cats[cat] = { size:0, count:0, color: catColor(cat) };
+    cats[cat].size += n.size;
+    cats[cat].count++;
+    total += n.size;
+  }
+  var arr = [];
+  for (var k in cats) arr.push({ cat:k, size:cats[k].size, count:cats[k].count, color:cats[k].color });
+
+  // Sort
+  arr.sort(function(a,b) {
+    var va, vb;
+    if (extSortCol === "size") { va = a.size; vb = b.size; }
+    else if (extSortCol === "pct") { va = a.size/total; vb = b.size/total; }
+    else if (extSortCol === "count") { va = a.count; vb = b.count; }
+    else { va = a.cat; vb = b.cat; }
+    if (va < vb) return -extSortDir;
+    if (va > vb) return extSortDir;
+    return 0;
+  });
+
   var tbody = document.getElementById("ext-body");
   tbody.innerHTML = "";
-  for (var i=0; i<stats.length; i++) {
-    var s = stats[i];
+  for (var i=0; i<arr.length; i++) {
+    var a = arr[i];
+    var pct = total > 0 ? (a.size/total*100).toFixed(1) : "0.0";
+    var barW = total > 0 ? Math.max(1, a.size/total*100) : 0;
     var tr = document.createElement("tr");
-    var pct = pctStr(s.size, total);
     tr.innerHTML =
-      '<td><span class="dot" style="background:'+catColor(s.cat)+'"></span> '+s.cat+'</td>' +
-      '<td style="white-space:nowrap">'+fmtBytes(s.size)+'</td>' +
-      '<td>'+pct+'<div class="ext-bar" style="width:'+pct+';background:'+catColor(s.cat)+'"></div></td>' +
-      '<td>'+s.count+'</td>';
-    (function(cat){ tr.onclick = function(){ showFilesByCategory(cat); }; })(s.cat);
+      '<td><span class="ext-swatch" style="background:' + a.color + '"></span></td>' +
+      '<td>' + esc(a.cat) + '</td>' +
+      '<td>' + fmtBytes(a.size) + '<div class="ext-bar" style="width:' + barW + '%;background:' + a.color + '"></div></td>' +
+      '<td>' + pct + '%</td>' +
+      '<td>' + a.count + '</td>';
+    tr.onclick = function(e) {
+      var cat = arr[i].cat;
+      highlightExt(cat);
+      tbody.querySelectorAll("tr").forEach(function(r){ r.classList.remove("selected"); });
+      this.classList.add("selected");
+    };
     tbody.appendChild(tr);
   }
 }
 
-function showFilesByCategory(cat) {
-  var nodes = flat.filter(function(n){ return n.category===cat && n.parent!==null; }).slice(0,200);
-  document.getElementById("file-title").textContent = "Files: " + cat;
-  var tot = 0;
-  for (var i=0;i<nodes.length;i++) tot += nodes[i].size||0;
-  if (!tot) tot = 1;
-  var tb = document.getElementById("tbl");
-  tb.innerHTML = "";
-  for (var i=0; i<nodes.length; i++) {
-    var r = nodes[i];
-    var tr = document.createElement("tr");
-    tr.innerHTML =
-      '<td><div class="name-cell"><a href="javascript:void(0)">'+esc(r.name)+'</a></div><div class="small">'+esc(r.path||"")+'</div></td>' +
-      '<td style="white-space:nowrap">'+fmtBytes(r.size)+' <span class="pct">'+pctStr(r.size,tot)+'</span></td>';
-    (function(node){ tr.onclick = function(){ showFileActions(node); }; })(r);
-    tb.appendChild(tr);
+function highlightExt(cat) {
+  var rows = document.querySelectorAll("#ext-body tr");
+  for (var i=0; i<rows.length; i++) {
+    if (rows[i].cells[1].textContent === cat) {
+      rows[i].classList.add("selected");
+      rows[i].scrollIntoView({ block: "nearest" });
+    } else {
+      rows[i].classList.remove("selected");
+    }
   }
 }
 
-// Init
-buildSidebarStats();
-buildExtTable();
-updateBreadcrumb();
-renderViz(currentNode);
+// === Extension column sorting ===
+(function(){
+  var ths = document.querySelectorAll(".ext-table th[data-sort]");
+  for (var i=0; i<ths.length; i++) {
+    ths[i].onclick = function() {
+      var col = this.dataset.sort;
+      if (extSortCol === col) { extSortDir *= -1; }
+      else { extSortCol = col; extSortDir = (col === "name") ? 1 : -1; }
+      renderExtTable();
+    };
+  }
+})();
 
-document.getElementById("btn-up").onclick    = navigateUp;
-document.getElementById("btn-root").onclick  = navigateRoot;
-document.getElementById("btn-reload").onclick = function(){ location.reload(); };
-document.getElementById("filter").addEventListener("input", function(){ renderViz(currentNode); });
-window.addEventListener("resize", function(){ renderViz(currentNode); });
+// === Footer ===
+function updateFooter() {
+  var f = document.getElementById("footer");
+  var nodes = flat.slice(1);
+  var total = 0, files = 0, dirs = 0;
+  for (var i=0; i<nodes.length; i++) {
+    total += nodes[i].size;
+    if (nodes[i].category === "folder") dirs++;
+    else files++;
+  }
+  f.innerHTML = '<span>' + fmtBytes(total) + ' total</span>' +
+    '<span>' + files + ' files</span>' +
+    '<span>' + dirs + ' directories</span>' +
+    '<span>' + (nodes.length) + ' items</span>';
+}
+
+// === Context Menu ===
+var ctxMenu = document.getElementById("ctx-menu");
+function showContextMenu(x, y, node) {
+  selectedNode = node;
+  ctxMenu.style.display = "block";
+  ctxMenu.style.left = x + "px";
+  ctxMenu.style.top = y + "px";
+  var rect = ctxMenu.getBoundingClientRect();
+  if (rect.bottom > window.innerHeight) ctxMenu.style.top = (y - rect.height) + "px";
+  if (rect.right > window.innerWidth) ctxMenu.style.left = (x - rect.width) + "px";
+}
+document.addEventListener("click", function(e) {
+  if (!ctxMenu.contains(e.target)) ctxMenu.style.display = "none";
+});
+ctxMenu.addEventListener("click", function(e) {
+  var item = e.target.closest(".ctx-item");
+  if (!item) return;
+  var act = item.dataset.act;
+  var node = selectedNode;
+  if (!node) return;
+  switch(act) {
+    case "openfolder": window.open("file://"+(node.path||""), "_blank"); break;
+    case "explore": window.open("file://"+node.name, "_blank"); break;
+    case "copy": navigator.clipboard.writeText(node.path||""); break;
+    case "zoominto": if (node.category === "folder") { currentNode = node.name; treeExpanded[currentNode] = true; renderTree(); renderTreemap(); updateHeader(); updateFooter(); } break;
+  }
+  ctxMenu.style.display = "none";
+});
+
+// === Keyboard shortcuts ===
+document.addEventListener("keydown", function(e) {
+  if (e.target.tagName === "INPUT") return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  switch(e.key) {
+    case "Backspace": e.preventDefault(); navigateUp(); break;
+    case "Home": e.preventDefault(); navigateRoot(); break;
+    case "r": case "R": renderTreemap(); break;
+    case "c": case "C":
+      if (selectedNode && selectedNode.path) navigator.clipboard.writeText(selectedNode.path);
+      break;
+  }
+});
+
+function navigateUp() {
+  var node = nodeMap[currentNode];
+  if (node && node.parent) {
+    currentNode = node.parent;
+    renderTree(); renderTreemap(); updateHeader(); updateFooter();
+  }
+}
+function navigateRoot() {
+  currentNode = rootNode.name;
+  selectedNode = rootNode;
+  renderTree(); renderTreemap(); updateHeader(); updateFooter();
+}
+
+// === Init ===
+function init() {
+  renderTree();
+  updateHeader();
+  renderExtTable();
+  renderTreemap();
+  updateFooter();
+  var resizeTimer;
+  window.addEventListener("resize", function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){ renderTreemap(); }, 150);
+  });
+}
+init();
 </script>
 </body>
 </html>

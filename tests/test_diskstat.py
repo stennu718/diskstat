@@ -198,10 +198,10 @@ def test_render_html_contains_color_mapping(tmp_path):
     csvp = tmp_path / "color.csv"
     render_html(tree, flat, str(htmlp), str(csvp))
     text = htmlp.read_text(encoding="utf-8")
-    # Template must embed category color mapping.
-    assert '"folder": "#1f77b4"' in text
-    assert '"doc": "#2ca02c"' in text
-    assert '"code": "#17becf"' in text
+    # Template must embed category color mapping (WinDirStat warm palette).
+    assert '"folder": "#E8D4A0"' in text
+    assert '"doc": "#509050"' in text
+    assert '"code": "#3080A0"' in text
 
 
 def test_render_html_file_list_includes_tooltip_attrs(tmp_path):
@@ -217,7 +217,7 @@ def test_render_html_file_list_includes_tooltip_attrs(tmp_path):
     # Must have the flat data and color config embedded
     assert "colors" in text
     assert "flat" in text
-    assert "extStats" in text
+    assert "renderExtTable" in text
 
 
 def test_render_html_csv_has_correct_columns(tmp_path):
@@ -405,7 +405,7 @@ def test_render_template_substitutes_placeholders():
     assert "__JS_COLORS__" not in result
     assert "MyRoot" in result
     assert "test.txt" in result
-    assert "#1f77b4" in result  # folder color from EXT_COLORS
+    assert "#E8D4A0" in result  # folder color from EXT_COLORS (WinDirStat warm palette)
 
 
 def test_render_template_escapes_html():

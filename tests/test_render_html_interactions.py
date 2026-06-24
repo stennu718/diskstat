@@ -27,7 +27,7 @@ def test_render_html_includes_flat_json_and_legend(tmp_path, sample_tree):
     text = htmlp.read_text(encoding="utf-8")
     assert "d3.v7.min.js" in text
     assert "treemap" in text
-    assert "legend" in text
+    assert "Extension List" in text
     # flat must be serialized into the page so JS can consume it.
-    serialized = "const flat = " + json.dumps(flat, ensure_ascii=False)
+    serialized = "var flat = " + json.dumps(flat, ensure_ascii=False)
     assert serialized in text

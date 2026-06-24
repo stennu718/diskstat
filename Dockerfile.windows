@@ -1,0 +1,23 @@
+FROM python:3.11-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    binutils \
+    patchelf \
+    gcc-mingw-w64-x86-64 \
+    g++-mingw-w64-x86-64 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY . /app
+
+RUN pip install --no-cache-dir -e . nuitka
+
+# Build Windows executable using Nuitka with mingw cross-compiler
+# Use CC/CXX env vars and --C-compiler-variant=mingw
+RUN CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
+    nuitka --standalone --onefile --output-filename=diskstat.exe \
+    --include-data-dir=diskstat=diskstat \
+    --assume-yes-for-downloads \
+    diskstat.py
+
+CMD ["cp", "dist/diskstat.exe", "/output/"]

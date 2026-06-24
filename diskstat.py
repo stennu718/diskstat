@@ -15,18 +15,18 @@ import argparse
 
 
 EXT_COLORS = {
-    "folder": "#1f77b4",
-    "unknown": "#cccccc",
-    "zip": "#ff7f0e",
-    "image": "#9467bd",
-    "video": "#d62728",
-    "audio": "#8c564b",
-    "doc": "#2ca02c",
-    "code": "#17becf",
-    "exe": "#e377c2",
-    "font": "#bcbd22",
-    "data": "#7f7f7f",
-    "system": "#aec7e8",
+    "folder": "#E8D4A0",
+    "unknown": "#C0C0B8",
+    "zip": "#D08030",
+    "image": "#9060B0",
+    "video": "#B04040",
+    "audio": "#806040",
+    "doc": "#509050",
+    "code": "#3080A0",
+    "exe": "#A05080",
+    "font": "#908050",
+    "data": "#707068",
+    "system": "#6080A0",
 }
 
 EXT_MAP = {
