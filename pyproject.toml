@@ -27,7 +27,7 @@ classifiers = [
 ]
 
 [project.scripts]
-diskstat = "diskstat:main"
+diskstat = "diskstat.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/stennu718/diskstat"
