@@ -1,121 +1,99 @@
 # DiskStat
 
-Disk usage analyzer — scans a directory and creates an interactive treemap report + CSV output.
+**Disk usage analysis** — scans a directory and creates an interactive treemap report + CSV output.
 
 [![CI](https://github.com/stennu718/diskstat/actions/workflows/tests.yml/badge.svg)](https://github.com/stennu718/diskstat/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-## Quick Examples
+## Features
+
+- **Interactive treemap** — visual, browser-based disk usage representation
+- **CSV export** — structured data for further analysis
+- **Cross-platform** — Linux (Docker) and Windows support
+- **Zero dependencies** — Python 3.11+ stdlib only
+- **Secure** — XSS guards, CSP, symlink safety, subprocess shell=False
+
+## Quick Start
 
 ```bash
-# Scan C: drive (WSL)
-python diskstat.py
+# Install
+pip install -e .
 
-# JSON output
-python diskstat.py /mnt/c/ --format json
+# Scan current directory
+python -m diskstat .
 
-# Live progress
-python diskstat.py /mnt/c/ --progress
+# Scan specific path with JSON output
+python -m diskstat /path/to/scan --format json
 
-# Custom output
-python diskstat.py /home/user/Downloads -o /tmp/my-report
-```
-
-### Output
-
-```json
-{
-  "ok": true,
-  "target": "/mnt/c/",
-  "stats": {
-    "files": 152340,
-    "dirs": 28471,
-    "elapsed_s": 12.3
-  },
-  "total_human": "485.2 GB",
-  "nodes_included": 5000,
-  "output": {
-    "html": "diskstat/20260602_143022/report.html",
-    "csv": "diskstat/20260602_143022/files.csv"
-  }
-}
+# Docker
+docker run --rm -v /path/to/scan:/data stennu718/diskstat /data
 ```
 
 ## Usage
 
-### Docker (recommended)
-
-```powershell
-# Windows PowerShell
-docker run --rm -v C:\:/mnt/c -v ${HOME}\diskstat-output:/out `
-  ghcr.io/stennu718/diskstat:latest /mnt/c/ -o /out
 ```
-
-Or double-click `docker-build-run.ps1`.
-
-### Command-line
-
-```bash
-python diskstat.py [PATH] [OPTIONS]
+python -m diskstat [PATH] [OPTIONS]
 
 Options:
-  -o, --out DIR          Output directory (default: diskstat/YYYYMMDD_HHMMSS)
-  --open                 Open HTML report after creation
-  -m, --max-nodes N      Maximum nodes for visualization (1-500000, default 5000)
-  --format {text,json}   Output format
-  --progress             Show scanning progress
-  --no-color             Output without colors
-  --min-size BYTES       Skip files smaller than this
-  --category CAT         Filter by category (repeatable)
-  --exclude DIR          Exclude directory (repeatable: .git, node_modules)
-  --sort {size,name}     Sort order (default: size)
-  --top N                Show top N largest files (0 = all)
-  --reverse              Reverse sort order (smallest first)
-  --filter REGEX         Regex filter for filenames (case-insensitive)
-  --max-depth N          Maximum scan depth (default 256)
-  --dry-run              Scan only, don't write files
-  --no-html              Skip HTML generation (CSV only)
-  --config FILE          YAML/JSON config file for defaults
-  --compare BASELINE     Compare with baseline CSV (show added/removed/changed)
-  --version              Show version
-  --help                 Show help
-
-Examples:
-  # Compare two scans
-  python diskstat.py /mnt/c/ --compare baseline.csv
-
-  # Use config file
-  python diskstat.py /mnt/c/ --config diskstat.json
-
-  # Bash autocomplete (source completions/diskstat.bash)
-  source completions/diskstat.bash
-```
-
-## Docker image
-
-```powershell
-docker pull ghcr.io/stennu718/diskstat:latest
-```
-
-## Development
-
-```bash
-uv tool run pytest tests/ -v
+  -o, --out DIR       Output directory (default: diskstat/YYYYMMDD_HHMMSS)
+  --open              Open HTML report after creation
+  -m, --max-nodes N   Max nodes to visualize (1-500000, default: 5000)
+  --format {text,json} Output format
+  --progress          Show scan progress
+  --min-size BYTES    Skip files smaller than this
+  --category CAT      Filter by category (repeatable)
+  --exclude DIR       Exclude directory (repeatable: .git, node_modules)
+  --sort {size,name}  Sort order (default: size)
+  --top N             Show top N largest files (0 = all)
+  --reverse           Reverse sort order
+  --filter REGEX      Regex filter for filenames (case-insensitive)
+  --max-depth N       Maximum scan depth (default: 256)
+  --dry-run           Scan only, don't write files
+  --no-html           Skip HTML generation (CSV only)
+  --config FILE       YAML/JSON config file
+  --compare BASELINE  Compare with baseline CSV
+  --version           Show version
 ```
 
 ## Architecture
 
-- **Python 3.11+**, stdlib only (no external dependencies)
-- **D3.js** treemap visualization in HTML
-- **Zero-config**: `python diskstat.py` works out of the box
-- **Secure**: XSS guard, subprocess.shell=False, max_nodes clamp, CSP meta tag
+```
+diskstat/
+├── cli.py          # Argument parsing, entry point
+├── scanner.py      # Directory scanning, path resolution
+├── renderer.py     # HTML treemap generation, CSV output
+├── reporter.py     # Report comparison, output formatting
+├── config.py       # Configuration loading, constants
+└── template.html   # D3.js treemap template
+```
+
+## Security
+
+- **XSS protection** — HTML escaping via `esc()` function
+- **CSP header** — Content-Security-Policy meta tag
+- **Subprocess safety** — `shell=False` throughout
+- **Symlink handling** — `follow_symlinks=False` prevents traversal
+- **Input validation** — path existence, readability checks, max_nodes clamp
+
+## Development
+
+```bash
+# Run tests
+pytest tests/ -v
+
+# Lint
+ruff check .
+
+# Type check
+mypy diskstat/
+```
 
 ## Screenshots
 
-![Treemap](docs/screenshot-treemap.png)
+![Treemap Report](docs/screenshot-treemap.png)
 
-*Interactive treemap report generated by DiskStat*
+*Interactive treemap generated by DiskStat*
 
 ## Contributing
 
