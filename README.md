@@ -1,28 +1,28 @@
 # DiskStat
 
-Kettakasutuse analüüs — skaneerib kataloogi ja loob interaktsiivse treemap raporti + CSV väljundi.
+Disk usage analyzer — scans a directory and creates an interactive treemap report + CSV output.
 
 [![CI](https://github.com/stennu718/diskstat/actions/workflows/tests.yml/badge.svg)](https://github.com/stennu718/diskstat/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-## Kiired näited
+## Quick Examples
 
 ```bash
-# Skaneeri C: ketas (WSL)
+# Scan C: drive (WSL)
 python diskstat.py
 
-# JSON väljund
+# JSON output
 python diskstat.py /mnt/c/ --format json
 
 # Live progress
 python diskstat.py /mnt/c/ --progress
 
-# Kohandatud väljund
+# Custom output
 python diskstat.py /home/user/Downloads -o /tmp/my-report
 ```
 
-### Väljund
+### Output
 
 ```json
 {
@@ -42,73 +42,74 @@ python diskstat.py /home/user/Downloads -o /tmp/my-report
 }
 ```
 
-## Kasutamine
+## Usage
 
-### Docker (soovitatud)
+### Docker (recommended)
 
 ```powershell
 # Windows PowerShell
 docker run --rm -v C:\:/mnt/c -v ${HOME}\diskstat-output:/out `
-  ghcr.io/y84312/diskstat:latest /mnt/c/ -o /out
+  ghcr.io/stennu718/diskstat:latest /mnt/c/ -o /out
 ```
 
-Või topeltklõpsa `docker-build-run.ps1`.
+Or double-click `docker-build-run.ps1`.
 
-### Käsurealt
+### Command-line
 
 ```bash
 python diskstat.py [PATH] [OPTIONS]
 
 Options:
-  -o, --out DIR          Väljundkaust (vaikimisi: diskstat/YYYYMMDD_HHMMSS)
-  --open                 Ava HTML raport peale loomist
-  -m, --max-nodes N      Maksimaalse arv visualiseerimiseks (1-500000, vaikimisi 5000)
-  --format {text,json}   Väljundi formaat
-  --progress             Kuva skaneerimise edenemist
-  --no-color             Väljasta ilma värvideta
-  --min-size BYTES       Jäta väiksemad failid välja
-  --category CAT         Filtreeri kategooriale (mitmekordne)
-  --exclude DIR          Jäta kataloog välja (mitmekordne: .git, node_modules)
-  --sort {size,name}     Sortimise järjekord (vaikimisi: size)
-  --top N                Kuva top N suurimat faili (0 = kõik)
-  --reverse              Pööra sortimise järjekord (väiksemad enne)
-  --filter REGEX         Regex filter failinimedele (case-insensitive)
-  --max-depth N          Maksimaalse skaneerimise sügavus (vaikimisi 256)
-  --dry-run              Skanneeri ainult, ära kirjuta faile
-  --no-html              Jäta HTML genereerimata (ainult CSV)
-  --config FILE          YAML/JSON konfiguratsioonifail vaikesätete jaoks
-  --compare BASELINE     Võrdle baseline CSV-ga (näita lisatud/eemaldatud/muutunud)
-  --version              Kuva versioon
-  --help                 Kuva abiinfo
+  -o, --out DIR          Output directory (default: diskstat/YYYYMMDD_HHMMSS)
+  --open                 Open HTML report after creation
+  -m, --max-nodes N      Maximum nodes for visualization (1-500000, default 5000)
+  --format {text,json}   Output format
+  --progress             Show scanning progress
+  --no-color             Output without colors
+  --min-size BYTES       Skip files smaller than this
+  --category CAT         Filter by category (repeatable)
+  --exclude DIR          Exclude directory (repeatable: .git, node_modules)
+  --sort {size,name}     Sort order (default: size)
+  --top N                Show top N largest files (0 = all)
+  --reverse              Reverse sort order (smallest first)
+  --filter REGEX         Regex filter for filenames (case-insensitive)
+  --max-depth N          Maximum scan depth (default 256)
+  --dry-run              Scan only, don't write files
+  --no-html              Skip HTML generation (CSV only)
+  --config FILE          YAML/JSON config file for defaults
+  --compare BASELINE     Compare with baseline CSV (show added/removed/changed)
+  --version              Show version
+  --help                 Show help
 
-Näited:
-  # Võrdle kahte skaneerimist
+Examples:
+  # Compare two scans
   python diskstat.py /mnt/c/ --compare baseline.csv
 
-  # Kasuta konfiguratsioonifaili
+  # Use config file
   python diskstat.py /mnt/c/ --config diskstat.json
 
   # Bash autocomplete (source completions/diskstat.bash)
   source completions/diskstat.bash
+```
 
 ## Docker image
 
 ```powershell
-docker pull ghcr.io/y84312/diskstat:latest
+docker pull ghcr.io/stennu718/diskstat:latest
 ```
 
-## Arendamine
+## Development
 
 ```bash
 uv tool run pytest tests/ -v
 ```
 
-## Arhitektuur
+## Architecture
 
-- **Python 3.11+**, ainult stdlib (ei välis sõltuvusi)
-- **D3.js** treemap visuaalisatsioon HTML-s
-- **Zero-config**: `python diskstat.py` töötab kohe
-- **Turvaline**: XSS guard, subprocess.shell=False, max_nodes clamp, CSP meta tag
+- **Python 3.11+**, stdlib only (no external dependencies)
+- **D3.js** treemap visualization in HTML
+- **Zero-config**: `python diskstat.py` works out of the box
+- **Secure**: XSS guard, subprocess.shell=False, max_nodes clamp, CSP meta tag
 
 ## Screenshots
 
@@ -120,6 +121,6 @@ uv tool run pytest tests/ -v
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-## Litsents
+## License
 
 MIT
