@@ -5,6 +5,7 @@
 [![CI](https://github.com/stennu718/diskstat/actions/workflows/tests.yml/badge.svg)](https://github.com/stennu718/diskstat/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/github/v/release/stennu718/diskstat)](https://github.com/stennu718/diskstat/releases)
 
 ![Treemap](docs/screenshot.png)
 
