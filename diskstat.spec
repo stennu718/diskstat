@@ -5,7 +5,7 @@ a = Analysis(
     ['diskstat.py'],
     pathex=[],
     binaries=[],
-    datas=[('template.html', '.')],
+    datas=[('diskstat/template.html', 'diskstat')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
