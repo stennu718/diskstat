@@ -9,6 +9,10 @@
 
 ![Treemap](docs/screenshot.png)
 
+## Demo
+
+![Demo](docs/demo.gif)
+
 ## Features
 
 - **Interactive treemap** — visual, browser-based disk usage representation
