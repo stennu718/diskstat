@@ -10,6 +10,7 @@ import webbrowser
 from pathlib import Path
 
 from .config import EXT_COLORS
+from .scanner import format_bytes
 
 
 def esc(value: str) -> str:
@@ -97,15 +98,3 @@ def _open_report(html_out: str) -> None:
         subprocess.run([cmd_path, "/c", "start", "", html_win], shell=False)
     else:
         webbrowser.open(html_win)
-
-
-def format_bytes(b) -> str:
-    """Format bytes as human-readable string (re-exported for renderer use)."""
-    if not isinstance(b, (int, float)):
-        return "0.0 B"
-    if b <= 0:
-        return "0.0 B"
-    units = ["B", "KB", "MB", "GB", "TB", "PB"]
-    i = int(min(len(units) - 1, (int(b).bit_length() - 1) // 10))
-    v = b / (1024 ** i)
-    return f"{v:.1f} {units[i]}"

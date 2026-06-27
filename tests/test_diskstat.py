@@ -391,7 +391,7 @@ def test_find_template_exists():
     """_find_template should find the template file."""
     path = _find_template()
     assert os.path.exists(path)
-    assert path.endswith("template.html")
+    assert str(path).endswith("template.html")
 
 
 def test_render_template_substitutes_placeholders():
