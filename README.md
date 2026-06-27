@@ -13,6 +13,15 @@
 
 ![Demo](docs/demo.gif)
 
+## Try it
+
+🖥️ **[Try Live Demo](https://stennu718.github.io/diskstat/demo/)** — scan directories, generate reports, export JSON/CSV
+
+Or run locally:
+```bash
+python -m diskstat /home --progress
+```
+
 ## Features
 
 - **Interactive treemap** — visual, browser-based disk usage representation
