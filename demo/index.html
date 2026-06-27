@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DiskStat — Interactive Demo</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; color: #e0e0e8; font-family: 'JetBrains Mono', 'Fira Code', monospace; height: 100vh; display: flex; flex-direction: column; }
+.terminal { flex: 1; padding: 20px; overflow-y: auto; max-height: calc(100vh - 60px); }
+.line { margin: 4px 0; font-size: 14px; line-height: 1.6; }
+.prompt { color: #64d989; }
+.command { color: #58a6ff; }
+.output { color: #b0b0c0; }
+.bar { display: inline-block; height: 14px; border-radius: 2px; margin: 0 8px; }
+.bar-home { background: #ffb454; }
+.bar-var { background: #58a6ff; }
+.bar-tmp { background: #64d989; }
+.bar-usr { background: #ff7b64; }
+.bar-opt { background: #b07fff; }
+.json { color: #64d989; }
+.input-line { display: flex; align-items: center; padding: 10px 20px; background: #12121a; border-top: 1px solid #2a2a3a; }
+.input-line input { flex: 1; background: transparent; border: none; color: #e0e0e8; font-family: inherit; font-size: 14px; outline: none; }
+.input-line input::placeholder { color: #505060; }
+.btn { background: #2a2a3a; color: #64d989; border: 1px solid #3a3a4a; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-left: 8px; }
+.btn:hover { background: #3a3a4a; }
+.btn.active { background: #1a3a2a; border-color: #64d989; }
+hud { display: flex; gap: 20px; padding: 8px 20px; background: #0f0f18; border-bottom: 1px solid #2a2a3a; font-size: 12px; color: #808090; }
+hud span { color: #64d989; }
+</style>
+</head>
+<body>
+<div class="hud">
+  <div>Files: <span id="fileCount">0</span></div>
+  <div>Size: <span id="totalSize">0 KB</span></div>
+  <div>Time: <span id="scanTime">0.0s</span></div>
+  <div>Status: <span id="status">Ready</span></div>
+</div>
+<div class="terminal" id="terminal">
+  <div class="line"><span class="prompt">$</span> <span class="command">diskstat --help</span></div>
+  <div class="line output">DiskStat — Disk usage analyzer with interactive treemap</div>
+  <div class="line output">Usage: diskstat [PATH] [--format html|json|csv] [--progress] [--open]</div>
+  <div class="line output"></div>
+  <div class="line"><span class="prompt">$</span> <span class="command">diskstat /home --progress</span></div>
+</div>
+<div class="input-line">
+  <span class="prompt" style="margin-right:8px;">$</span>
+  <input type="text" id="cmdInput" placeholder="Type a command... (try: diskstat /home, diskstat --format json, help)" autofocus>
+  <button class="btn" id="runBtn">Run</button>
+  <button class="btn" id="demoBtn">Auto Demo</button>
+</div>
+
+<script>
+const terminal = document.getElementById('terminal');
+const input = document.getElementById('cmdInput');
+const runBtn = document.getElementById('runBtn');
+const demoBtn = document.getElementById('demoBtn');
+
+const responses = {
+  'diskstat /home': () => {
+    const files = [
+      { name: '/home/user/Documents', size: 2.1, pct: 32, color: 'home' },
+      { name: '/home/user/Downloads', size: 1.8, pct: 27, color: 'var' },
+      { name: '/home/user/Pictures', size: 1.2, pct: 18, color: 'tmp' },
+      { name: '/home/user/Videos', size: 0.9, pct: 14, color: 'usr' },
+      { name: '/home/user/Music', size: 0.6, pct: 9, color: 'opt' },
+    ];
+    let html = '<div class="line output">Scanning filesystem...</div>';
+    html += '<div class="line output"></div>';
+    html += '<div class="line output">╔══════════════════════════════════════════════════╗</div>';
+    html += '<div class="line output">║  PATH               SIZE      USAGE            ║</div>';
+    html += '<div class="line output">╠══════════════════════════════════════════════════╣</div>';
+    files.forEach(f => {
+      const barLen = Math.round(f.pct / 2);
+      const bar = `<span class="bar bar-${f.color}" style="width:${barLen * 4}px"></span>`;
+      html += `<div class="line output">║  ${f.name.padEnd(18)} ${f.size.toFixed(1)} GB  ${bar} ${f.pct}%  ║</div>`;
+    });
+    html += '<div class="line output">╚══════════════════════════════════════════════════╝</div>';
+    html += '<div class="line output"></div>';
+    html += '<div class="line output">Total: 6.6 GB scanned in 0.34s</div>';
+    html += '<div class="line output">Report saved: diskstat/20260627_143521/report.html</div>';
+    updateHUD(2847, '6.6 GB', '0.34s', 'Complete');
+    return html;
+  },
+  'diskstat --format json': () => {
+    const json = {
+      ok: true,
+      target: '/home',
+      total_size: 7077888000,
+      files: [
+        { path: '/home/user/Documents', size: 2254857472, type: 'dir' },
+        { path: '/home/user/Downloads', size: 1932735283, type: 'dir' },
+        { path: '/home/user/Pictures', size: 1288490188, type: 'dir' },
+      ]
+    };
+    updateHUD(2847, '6.6 GB', '0.28s', 'JSON output');
+    return `<div class="line output"><pre class="json">${JSON.stringify(json, null, 2)}</pre></div>`;
+  },
+  'diskstat /var': () => {
+    updateHUD(1203, '2.1 GB', '0.15s', 'Complete');
+    return `<div class="line output">Scanning /var...</div>
+<div class="line output">  /var/log     ██████░░░░  58%  1.2 GB</div>
+<div class="line output">  /var/cache   ███░░░░░░░  32%  670 MB</div>
+<div class="line output">  /var/lib      ██░░░░░░░░  10%  210 MB</div>
+<div class="line output"></div>
+<div class="line output">Total: 2.1 GB in 0.15s</div>`;
+  },
+  'help': () => {
+    return `<div class="line output">Available commands:</div>
+<div class="line output">  diskstat [PATH]          Scan directory and show usage</div>
+<div class="line output">  diskstat --format json   Output as JSON</div>
+<div class="line output">  diskstat --format csv    Output as CSV</div>
+<div class="line output">  diskstat --progress      Show live progress</div>
+<div class="line output">  diskstat --open          Open report in browser</div>
+<div class="line output">  help                     Show this help</div>
+<div class="line output">  clear                    Clear terminal</div>`;
+  },
+  'clear': () => { terminal.innerHTML = ''; return null; },
+  'diskstat --progress': () => {
+    updateHUD(2847, '6.6 GB', '0.34s', 'Scanning...');
+    let html = '<div class="line output">Scanning filesystem...</div>';
+    const steps = [
+      { pct: 15, label: 'Reading inodes...' },
+      { pct: 35, label: 'Analyzing directories...' },
+      { pct: 60, label: 'Building treemap...' },
+      { pct: 85, label: 'Generating report...' },
+      { pct: 100, label: 'Done!' },
+    ];
+    steps.forEach((s, i) => {
+      const filled = Math.round(s.pct / 5);
+      const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
+      html += `<div class="line output">  [${bar}] ${s.pct}% — ${s.label}</div>`;
+    });
+    html += '<div class="line output"></div>';
+    html += '<div class="line output">Report saved: diskstat/20260627_143521/report.html</div>';
+    return html;
+  }
+};
+
+function updateHUD(files, size, time, status) {
+  document.getElementById('fileCount').textContent = files;
+  document.getElementById('totalSize').textContent = size;
+  document.getElementById('scanTime').textContent = time;
+  document.getElementById('status').textContent = status;
+}
+
+function addLine(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  terminal.appendChild(div);
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+function runCommand(cmd) {
+  cmd = cmd.trim();
+  if (!cmd) return;
+  addLine(`<div class="line"><span class="prompt">$</span> <span class="command">${cmd}</span></div>`);
+  
+  const response = responses[cmd];
+  if (response) {
+    const html = response();
+    if (html) addLine(html);
+  } else if (cmd.startsWith('diskstat')) {
+    addLine(`<div class="line output">Scanning... (simulated output)</div>
+<div class="line output">  /home  ████████░░  67%</div>
+<div class="line output">  /var   ████░░░░░░  34%</div>
+<div class="line output">  Total: 2.1 GB scanned</div>`);
+  } else {
+    addLine(`<div class="line output">Command not found: ${cmd}</div>
+<div class="line output">Type 'help' for available commands.</div>`);
+  }
+  input.value = '';
+}
+
+let demoInterval = null;
+const demoCommands = ['help', 'diskstat /home', 'diskstat --format json', 'diskstat --progress', 'diskstat /var'];
+let demoIdx = 0;
+
+function runDemo() {
+  if (demoInterval) {
+    clearInterval(demoInterval);
+    demoInterval = null;
+    demoBtn.textContent = 'Auto Demo';
+    demoBtn.classList.remove('active');
+    return;
+  }
+  demoBtn.textContent = 'Stop Demo';
+  demoBtn.classList.add('active');
+  demoIdx = 0;
+  runCommand(demoCommands[0]);
+  demoIdx = 1;
+  demoInterval = setInterval(() => {
+    if (demoIdx < demoCommands.length) {
+      runCommand(demoCommands[demoIdx]);
+      demoIdx++;
+    } else {
+      clearInterval(demoInterval);
+      demoInterval = null;
+      demoBtn.textContent = 'Auto Demo';
+      demoBtn.classList.remove('active');
+    }
+  }, 2000);
+}
+
+runBtn.addEventListener('click', () => runCommand(input.value));
+demoBtn.addEventListener('click', runDemo);
+input.addEventListener('keypress', (e) => { if (e.key === 'Enter') runCommand(input.value); });
+input.focus();
+</script>
+</body>
+</html>
