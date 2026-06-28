@@ -42,7 +42,7 @@ def _make_colors(enabled: bool):
 
 def _parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Disk usage analyzer (WinDirStat-like) for Windows/WSL")
-    ap.add_argument("path", nargs="?", default="/mnt/c/", help="Path to scan (default: /mnt/c/)")
+    ap.add_argument("path", nargs="?", default=".", help="Path to scan (default: current directory)")
     ap.add_argument("-o", "--out", default=None, help="Output directory")
     ap.add_argument("--open", action="store_true", help="Open HTML report after generation")
     ap.add_argument("-m", "--max-nodes", type=int, default=5000,

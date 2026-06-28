@@ -192,7 +192,7 @@ function fmtBytes(n) {
   return (n/Math.pow(1024,i)).toFixed(1)+" "+u[i];
 }
 function esc(s) {
-  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#x27;");
 }
 
 // === Build tree from flat data ===

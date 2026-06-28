@@ -39,7 +39,7 @@ if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir | Out
 
 # Skaneeri
 Write-Host "[2/3] Skaneerimine — C: ketas..." -ForegroundColor Green
-docker run --rm -v "C:\:/mnt/c" -v "${outDir}:/out" $image /mnt/c/ -o /out
+docker run --rm -v "C:\:/mnt/c" -v "${outDir}:/out" $image /mnt/c -o /out
 
 # Ava raport
 $report = Get-ChildItem -Path $outDir -Recurse -Filter "report.html" | Sort-Object LastWriteTime -Descending | Select-Object -First 1

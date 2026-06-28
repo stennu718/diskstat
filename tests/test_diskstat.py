@@ -440,7 +440,7 @@ def test_parse_args_defaults():
     try:
         sys.argv = ["diskstat.py"]
         args = _parse_args()
-        assert args.path == "/mnt/c/"
+        assert args.path == "."
         assert args.max_nodes == 5000
         assert args.min_size == 0
         assert args.format == "text"

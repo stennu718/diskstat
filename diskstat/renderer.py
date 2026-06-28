@@ -93,8 +93,15 @@ def _open_report(html_out: str) -> None:
         # Not under /mnt/ -- use file:// URL
         html_win = "file://" + html_out
 
-    if os.path.exists("/mnt/c/Windows/System32/cmd.exe"):
-        cmd_path = "/mnt/c/Windows/System32/cmd.exe"
+    # Try WSL path to Windows cmd.exe (any drive letter)
+    cmd_path = None
+    for letter in "cdefghijklmnopqrstuvwxyz":
+        candidate = f"/mnt/{letter}/Windows/System32/cmd.exe"
+        if os.path.exists(candidate):
+            cmd_path = candidate
+            break
+
+    if cmd_path:
         subprocess.run([cmd_path, "/c", "start", "", html_win], shell=False)
     else:
         webbrowser.open(html_win)
