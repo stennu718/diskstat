@@ -49,6 +49,27 @@ diskstat . --open
 
 ![Demo](docs/demo.gif)
 
+## Technical Highlights
+
+- **Language**: Python 3.11+, zero runtime dependencies (stdlib only)
+- **Output formats**: Interactive HTML treemap, CSV, JSON, TSV, plain text
+- **Testing**: 108 tests including property-based fuzzing (hypothesis)
+- **Security**: XSS protection, symlink handling, path traversal guards, input clamping
+- **Packaging**: PyPI package, shell completions (bash/zsh/fish), man page
+- **CI/CD**: GitHub Actions (tests, release, multi-platform)
+
+## Architecture
+
+```
+diskstat/
+  cli.py          # Argument parsing, main entry point
+  scanner.py      # Filesystem scanning, tree building
+  renderer.py     # HTML treemap generation
+  reporter.py     # CSV/JSON/TSV/text output
+  config.py       # Configuration loading (XDG-compliant)
+  completions.py  # Shell completion scripts
+```
+
 ## License
 
 MIT
