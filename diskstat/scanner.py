@@ -41,6 +41,11 @@ def ext_category(name: str, is_dir: bool = False) -> str:
 
 def format_bytes(b) -> str:
     """Format bytes as human-readable string."""
+    if b is None:
+        return "—"
+    if isinstance(b, float):
+        if b != b or b == float('inf') or b == float('-inf'):
+            return "—"
     if not isinstance(b, (int, float)):
         return "0.0 B"
     if b <= 0:
@@ -64,7 +69,6 @@ def scan(
         max_depth: override default max recursion depth
     """
     _depth_limit = max_depth if max_depth is not None else _MAX_SCAN_DEPTH
-    # Windows path normalisation is handled by _resolve_path
     try:
         path = _resolve_path(path)
     except (ValueError, OSError):
@@ -125,11 +129,9 @@ def scan(
         node["size"] = size
         return size
 
-    # If the target was deleted between validation and scan, handle gracefully
     try:
         _walk(path, tree)
     except (OSError, PermissionError):
-        # Target became inaccessible during scan -- return empty result
         pass
     return tree, {
         "files": scanned_files,
@@ -172,17 +174,14 @@ def build_flat(
     if max_nodes <= 1:
         return out
 
-    # BFS over children, sorted by size descending at each level
     queue: list[tuple[dict, str]] = []
     children = tree.get("children", [])
     children.sort(key=lambda x: x.get("size", 0), reverse=True)
     for child in children:
         cname = child.get("name", "")
         ccat = child.get("category", "folder" if "children" in child else "unknown")
-        # Skip excluded dirs
         if exclude_dirs and cname in exclude_dirs and ccat == "folder":
             continue
-        # Skip by category filter (always keep folders for traversal)
         if categories and ccat not in categories and ccat != "folder":
             continue
         queue.append((child, tree.get("name", "ROOT")))
@@ -193,9 +192,8 @@ def build_flat(
         count += 1
         cat = node.get("category", "folder" if "children" in node else "unknown")
 
-        # Apply filters
         if min_size > 0 and cat != "folder" and node.get("size", 0) < min_size:
-            count -= 1  # don't count filtered files
+            count -= 1
             continue
         if categories and cat not in categories:
             count -= 1

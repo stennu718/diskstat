@@ -1,11 +1,11 @@
-"""Output formatting: CSV, JSON, text, and report comparison."""
+"""Output formatting: CSV, TSV, JSON, text, HTML, and report comparison."""
 
 from __future__ import annotations
 
 import csv
 import json
 import os
-from typing import Any
+from typing import Any, IO
 
 from .scanner import format_bytes
 
@@ -26,6 +26,58 @@ def _write_csv(flat: list[dict], csv_path: str) -> None:
             ])
 
 
+def _write_csv_to_stream(flat: list[dict], stream: IO[str]) -> None:
+    """Write flat node list as CSV to a stream."""
+    w = csv.writer(stream)
+    w.writerow(["name", "path", "size_bytes", "size_human", "category", "parent"])
+    for row in flat:
+        w.writerow([
+            row.get("name", ""),
+            row.get("path", ""),
+            row.get("size", 0),
+            format_bytes(row.get("size", 0)),
+            row.get("category", "unknown"),
+            row.get("parent", ""),
+        ])
+
+
+def _write_tsv_to_stream(flat: list[dict], stream: IO[str]) -> None:
+    """Write flat node list as TSV to a stream."""
+    w = csv.writer(stream, delimiter="\t")
+    w.writerow(["name", "path", "size_bytes", "size_human", "category", "parent"])
+    for row in flat:
+        w.writerow([
+            row.get("name", ""),
+            row.get("path", ""),
+            row.get("size", 0),
+            format_bytes(row.get("size", 0)),
+            row.get("category", "unknown"),
+            row.get("parent", ""),
+        ])
+
+
+def _write_html_to_stream(flat: list[dict], stream: IO[str]) -> None:
+    """Write flat node list as a minimal HTML table to a stream."""
+    stream.write("<table>\n")
+    stream.write("<tr><th>name</th><th>path</th><th>size_bytes</th><th>size_human</th><th>category</th><th>parent</th></tr>\n")
+    for row in flat:
+        name = _html_escape(row.get("name", ""))
+        path = _html_escape(row.get("path", ""))
+        stream.write(
+            f"<tr><td>{name}</td><td>{path}</td>"
+            f"<td>{row.get('size', 0)}</td>"
+            f"<td>{format_bytes(row.get('size', 0))}</td>"
+            f"<td>{row.get('category', 'unknown')}</td>"
+            f"<td>{_html_escape(str(row.get('parent', '')))}</td></tr>\n"
+        )
+    stream.write("</table>\n")
+
+
+def _html_escape(s: str) -> str:
+    """Basic HTML escape."""
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
 def _compare_reports(
     current_flat: list[dict],
     baseline_path: str,
@@ -34,10 +86,8 @@ def _compare_reports(
     if not os.path.isfile(baseline_path):
         raise FileNotFoundError(f"Baseline not found: {baseline_path}")
 
-    # Build lookup: path -> size from current (path is unique, name is not)
     current = {n["path"]: n["size"] for n in current_flat if n.get("parent") is not None and n.get("path")}
 
-    # Read baseline
     baseline: dict[str, int] = {}
     with open(baseline_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -102,3 +152,21 @@ def _output_text(
           f"{stats['skipped']} skipped  {C.BOLD}{format_bytes(total)}{C.RESET} total")
     print(f"  {C.CYAN}HTML{C.RESET} : {html_out}")
     print(f"  {C.CYAN}CSV {C.RESET} : {csv_out}")
+
+
+def _output_csv(flat: list[dict]) -> None:
+    """Output flat list as CSV to stdout."""
+    _write_csv_to_stream(flat, sys.stdout)
+
+
+def _output_tsv(flat: list[dict]) -> None:
+    """Output flat list as TSV to stdout."""
+    _write_tsv_to_stream(flat, sys.stdout)
+
+
+def _output_html_table(flat: list[dict]) -> None:
+    """Output flat list as HTML table to stdout."""
+    _write_html_to_stream(flat, sys.stdout)
+
+
+import sys  # noqa: E402  -- needed for stream output

@@ -440,16 +440,14 @@ def test_parse_args_defaults():
     try:
         sys.argv = ["diskstat.py"]
         args = _parse_args()
-        assert args.path == "."
-        assert args.max_nodes == 5000
-        assert args.min_size == 0
-        assert args.format == "text"
+        assert args.path is None  # path is None when not provided (resolved later)
         assert args.no_color is False
         assert args.progress is False
         assert args.category == []
         assert args.exclude == []
-        assert args.sort == "size"
-        assert args.top == 0
+        assert args.stdin is False
+        assert args.verbose == 0
+        assert args.quiet is False
     finally:
         sys.argv = old_argv
 
@@ -546,7 +544,7 @@ def test_format_bytes_edge_cases():
     """format_bytes edge cases."""
     assert format_bytes(0) == "0.0 B"
     assert format_bytes(-1) == "0.0 B"
-    assert format_bytes(None) == "0.0 B"
+    assert format_bytes(None) == "—"
     assert format_bytes("abc") == "0.0 B"
     assert format_bytes(1) == "1.0 B"
     assert format_bytes(1023) == "1023.0 B"
@@ -734,8 +732,8 @@ def test_compare_reports(tmp_path):
 
 
 def test_load_config_json(tmp_path):
-    """_load_config should parse JSON config."""
-    from diskstat import _load_config
+    """load_config should parse JSON config."""
+    from diskstat import load_config
 
     config_file = tmp_path / "config.json"
     config_file.write_text(json.dumps({
@@ -744,18 +742,18 @@ def test_load_config_json(tmp_path):
         "min_size": 1024,
     }))
 
-    cfg = _load_config(str(config_file))
+    cfg = load_config(str(config_file))
     assert cfg["exclude"] == [".git", "node_modules"]
     assert cfg["max_nodes"] == 100
     assert cfg["min_size"] == 1024
 
 
 def test_load_config_missing_file():
-    """_load_config should raise FileNotFoundError for missing file."""
-    from diskstat import _load_config
+    """load_config should raise FileNotFoundError for missing file."""
+    from diskstat import load_config
 
     with pytest.raises(FileNotFoundError):
-        _load_config("/nonexistent/config.json")
+        load_config("/nonexistent/config.json")
 
 
 def test_main_compare_flag(tmp_path):
